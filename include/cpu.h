@@ -1,0 +1,24 @@
+#ifndef CPU_H
+#define CPU_H
+
+#include <stdint.h>
+
+#define MEM_SIZE (64 * 1024)
+
+enum {
+    OPCODE_R_TYPE = 0x33
+};
+
+typedef struct {
+    uint32_t registros[32];
+    uint32_t pc;
+    uint8_t memoria[MEM_SIZE];
+} CPU;
+
+void cpu_init(CPU *cpu);
+uint32_t cpu_fetch(CPU *cpu);
+void cpu_decode_execute(CPU *cpu, uint32_t instruction);
+void add(CPU *cpu, int rd, int rs1, int rs2);
+void sub(CPU *cpu, int rd, int rs1, int rs2);
+
+#endif
