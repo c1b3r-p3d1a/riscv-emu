@@ -20,5 +20,13 @@ uint32_t cpu_fetch(CPU *cpu);
 void cpu_decode_execute(CPU *cpu, uint32_t instruction);
 void add(CPU *cpu, int rd, int rs1, int rs2);
 void sub(CPU *cpu, int rd, int rs1, int rs2);
+void xor_op(CPU *cpu, int rd, int rs1, int rs2);
+void or_op(CPU *cpu, int rd, int rs1, int rs2);
+void and_op(CPU *cpu, int rd, int rs1, int rs2);
+void sll(CPU *cpu, int rd, int rs1, int rs2);
+void srl(CPU *cpu, int rd, int rs1, int rs2);
+void sra(CPU *cpu, int rd, int rs1, int rs2);
+void slt(CPU *cpu, int rd, int rs1, int rs2);
+void sltu(CPU *cpu, int rd, int rs1, int rs2);
 
 #endif

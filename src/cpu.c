@@ -36,8 +36,55 @@ void sub(CPU *cpu, int rd, int rs1, int rs2) {
     }
 }
 
+void xor_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] ^ cpu->registros[rs2];
+    }
+}
+
+void or_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] | cpu->registros[rs2];
+    }
+}
+
+void and_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] & cpu->registros[rs2];
+    }
+}
+
+void sll(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] << (cpu->registros[rs2] & 0x1F);
+    }
+}
+
+void srl(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] >> (cpu->registros[rs2] & 0x1F);
+    }
+}
+
+void sra(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = (int32_t)(cpu->registros[rs1]) >> (cpu->registros[rs2] & 0x1F);
+    }
+}
+
+void slt(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = ((int32_t)(cpu->registros[rs1]) < (int32_t)(cpu->registros[rs2]) ? 1 : 0);
+    }
+}
+
+void sltu(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->registros[rd] = (cpu->registros[rs1] < cpu->registros[rs2] ? 1 : 0);
+    }
+}
+
 void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
-    // printf("Instrucción leída: 0x%08X (aún no decodificada)\n", instruction);
     int opcode = extract(instruction, 0, 7);
     switch (opcode) {
         case OPCODE_R_TYPE: {
@@ -48,13 +95,31 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             int rs2 = extract(instruction, 20, 5);
 
             if (func3 == 0b000) {
-                if (func7 == 0b0000000) {
+                if (func7 == 0b000000) {
                     add(cpu, rd, rs1, rs2);
                     printf("0x%08x = %d\n", rd, (int32_t)cpu->registros[rd]);
-                } else if (func7 == 0b0100000) {
+                } else if (func7 == 0b100000) {
                     sub(cpu, rd, rs1, rs2);
                     printf("0x%08x = %d\n", rd, (int32_t)cpu->registros[rd]);
                 }
+            } else if (func3 == 0b100) {
+                xor_op(cpu, rd, rs1, rs2);
+            } else if (func3 == 0b110) {
+                or_op(cpu, rd, rs1, rs2);
+            } else if (func3 == 0b111) {
+                and_op(cpu, rd, rs1, rs2);
+            } else if (func3 == 0b001) {
+                sll(cpu, rd, rs1, rs2);
+            } else if (func3 == 0b101) {
+                if (func7 == 0b000000) {
+                    srl(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b100000) {
+                    sra(cpu, rd, rs1, rs2);
+                }
+            } else if (func3 == 0b010) {
+                slt(cpu, rd, rs1, rs2);
+            } else if (func3 == 0b011) {
+                sltu(cpu, rd, rs1, rs2);
             }
             break;
         }
