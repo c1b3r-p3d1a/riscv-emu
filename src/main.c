@@ -5,13 +5,13 @@ int main(void) {
     CPU cpu;
     cpu_init(&cpu);
 
-    cpu.memoria[0] = 0x13;
-    cpu.memoria[1] = 0x01;
-    cpu.memoria[2] = 0x02;
-    cpu.memoria[3] = 0x02;
+    cpu.memory[0] = 0x13;
+    cpu.memory[1] = 0x01;
+    cpu.memory[2] = 0x02;
+    cpu.memory[3] = 0x02;
 
-    cpu.registros[15] = 10;
-    cpu.registros[14] = 32;
+    cpu.reg[15] = 10;
+    cpu.reg[14] = 32;
     
     for (int i = 0; i < 1; i++) {
         uint32_t instruction = cpu_fetch(&cpu);

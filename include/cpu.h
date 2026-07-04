@@ -7,18 +7,20 @@
 
 enum {
     OPCODE_R_TYPE = 0x33,
-    OPCODE_I_TYPE = 0x13
+    OPCODE_I_ARITHMETIC_TYPE = 0x13,
+    OPCODE_I_LOAD_TYPE = 0x03
 };
 
 typedef struct {
-    uint32_t registros[32];
+    uint32_t reg[32];
     uint32_t pc;
-    uint8_t memoria[MEM_SIZE];
+    uint8_t memory[MEM_SIZE];
 } CPU;
 
 void cpu_init(CPU *cpu);
 uint32_t cpu_fetch(CPU *cpu);
 void cpu_decode_execute(CPU *cpu, uint32_t instruction);
+uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes);
 void add(CPU *cpu, int rd, int rs1, int rs2);
 void sub(CPU *cpu, int rd, int rs1, int rs2);
 void xor_op(CPU *cpu, int rd, int rs1, int rs2);
@@ -34,5 +36,10 @@ void addi(CPU *cpu, int rd, int rs1, int imm);
 void xori(CPU *cpu, int rd, int rs1, int imm);
 void ori(CPU *cpu, int rd, int rs1, int imm);
 void andi(CPU *cpu, int rd, int rs1, int imm);
+void slli(CPU *cpu, int rd, int rs1, int imm);
+void srli(CPU *cpu, int rd, int rs1, int imm);
+void srai(CPU *cpu, int rd, int rs1, int imm);
+void slti(CPU *cpu, int rd, int rs1, int imm);
+void sltiu(CPU *cpu, int rd, int rs1, int imm);
 
 #endif
