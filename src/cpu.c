@@ -84,6 +84,15 @@ void sltu(CPU *cpu, int rd, int rs1, int rs2) {
     }
 }
 
+int32_t sign_extended(uint32_t val, int org_bits) {
+    uint32_t mask = (1U << org_bits) - 1;
+    uint32_t bit_sign = 1U << (org_bits - 1);
+
+    val = val & mask;
+
+    return (int32_t)((val ^ bit_sign) - bit_sign);
+}
+
 void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
     int opcode = extract(instruction, 0, 7);
     switch (opcode) {
@@ -121,6 +130,14 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b011) {
                 sltu(cpu, rd, rs1, rs2);
             }
+            break;
+        }
+        case OPCODE_I_TYPE: {
+            int func3 = extract(instruction, 12, 3);
+            int imm = sign_extended(extract(instruction, 20, 12), 12);
+            int rd = extract(instruction, 7, 5);
+            int rs1 = extract(instruction, 15, 5);
+
             break;
         }
         default: {

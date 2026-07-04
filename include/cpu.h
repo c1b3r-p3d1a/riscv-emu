@@ -6,7 +6,8 @@
 #define MEM_SIZE (64 * 1024)
 
 enum {
-    OPCODE_R_TYPE = 0x33
+    OPCODE_R_TYPE = 0x33,
+    OPCODE_I_TYPE = 0x13
 };
 
 typedef struct {
