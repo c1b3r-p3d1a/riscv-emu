@@ -5,10 +5,10 @@ int main(void) {
     CPU cpu;
     cpu_init(&cpu);
 
-    cpu.memoria[0] = 0xb3;
-    cpu.memoria[1] = 0x87;
-    cpu.memoria[2] = 0xe7;
-    cpu.memoria[3] = 0x40;
+    cpu.memoria[0] = 0x13;
+    cpu.memoria[1] = 0x01;
+    cpu.memoria[2] = 0x02;
+    cpu.memoria[3] = 0x02;
 
     cpu.registros[15] = 10;
     cpu.registros[14] = 32;

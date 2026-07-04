@@ -93,6 +93,30 @@ int32_t sign_extended(uint32_t val, int org_bits) {
     return (int32_t)((val ^ bit_sign) - bit_sign);
 }
 
+void addi(CPU *cpu, int rd, int rs1, int imm) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] + (uint32_t)imm;
+    }
+}
+
+void xori(CPU *cpu, int rd, int rs1, int imm) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] ^ (uint32_t)imm;
+    }
+}
+
+void ori(CPU *cpu, int rd, int rs1, int imm) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] | (uint32_t)imm;
+    }
+}
+
+void andi(CPU *cpu, int rd, int rs1, int imm) {
+    if (rd != 0) {
+        cpu->registros[rd] = cpu->registros[rs1] & (uint32_t)imm;
+    }
+}
+
 void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
     int opcode = extract(instruction, 0, 7);
     switch (opcode) {
@@ -137,6 +161,16 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             int imm = sign_extended(extract(instruction, 20, 12), 12);
             int rd = extract(instruction, 7, 5);
             int rs1 = extract(instruction, 15, 5);
+
+            if (func3 == 0b000) {
+                addi(cpu, rd, rs1, imm);
+            } else if (func3 == 0b100) {
+                xori(cpu, rd, rs1, imm);
+            } else if (func3 == 0b110) {
+                ori(cpu, rd, rs1, imm);
+            } else if (func3 == 0b111) {
+                andi(cpu, rd, rs1, imm);
+            }
 
             break;
         }
