@@ -45,6 +45,12 @@ uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes) {
     return bytes;
 }
 
+void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes) {
+    for (int i = 0; i < num_bytes; i++) {
+        cpu->memory[addr + i] = (value >> i*8) & 0xFF;
+    }
+}
+
 void add(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] + cpu->reg[rs2];
@@ -191,6 +197,18 @@ void lhu(CPU *cpu, int rd, int addr) {
     }
 }
 
+void sb(CPU *cpu, int rs2, int addr) {
+    write_memory(cpu, addr, cpu->reg[rs2], 1);
+}
+
+void sh(CPU *cpu, int rs2, int addr) {
+    write_memory(cpu, addr, cpu->reg[rs2], 2);
+}
+
+void sw(CPU *cpu, int rs2, int addr) {
+    write_memory(cpu, addr, cpu->reg[rs2], 4);
+}
+
 void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
     int opcode = extract(instruction, 0, 7);
     
@@ -278,6 +296,26 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b101) {
                 lhu(cpu, rd, addr);
             }
+            break;
+        }
+        case OPCODE_S_TYPE: {
+            int func3 = extract(instruction, 12, 3);
+            int imm_high = extract(instruction, 25, 7);
+            int imm_low = extract(instruction, 7, 5);
+            int imm_complete = (imm_high << 5) | imm_low;
+            int imm = sign_extended(imm_complete, 12);
+            int rs1 = extract(instruction, 15, 5);
+            int rs2 = extract(instruction, 20, 5);
+            int addr = cpu->reg[rs1] + imm;
+
+            if (func3 == 0b000) {
+                sb(cpu, rs2, addr);
+            } else if (func3 == 0b001) {
+                sh(cpu, rs2, addr);
+            } else if (func3 == 0b010) {
+                sw(cpu, rs2, addr);
+            }
+
             break;
         }
         default: {
