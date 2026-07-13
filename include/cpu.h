@@ -11,7 +11,11 @@ enum {
     OPCODE_I_ARITHMETIC_TYPE = 0x13,
     OPCODE_I_LOAD_TYPE = 0x03,
     OPCODE_S_TYPE = 0x23,
-    OPCODE_B_TYPE = 0x10C8EB
+    OPCODE_B_TYPE = 0x63,
+    OPCODE_U_LOAD_TYPE = 0x37,
+    OPCODE_U_ADD_TYPE = 0x17,
+    OPCODE_J_TYPE = 0x6F,
+    OPCODE_I_JUMP_TYPE = 0x67
 };
 
 typedef struct {

@@ -366,6 +366,59 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             }
             break;
         }
+        case OPCODE_U_LOAD_TYPE: {
+            int imm = extract(instruction, 12, 20) << 12;
+            int rd = extract(instruction, 7, 5);
+
+            if (rd != 0) {
+                cpu->reg[rd] = imm;
+            }
+            
+            cpu->pc += 4;
+            break;
+        }
+        case OPCODE_U_ADD_TYPE: {
+            int imm = extract(instruction, 12, 20) << 12;
+            int rd = extract(instruction, 7, 5);
+            
+            if (rd != 0) {
+                cpu->reg[rd] = cpu->pc + imm;
+            }
+            cpu->pc += 4;
+            break;
+        }
+        case OPCODE_J_TYPE: {
+            int imm20 = extract(instruction, 31, 1);
+            int imm10_1 = extract(instruction, 21, 10);
+            int imm11 = extract(instruction, 20, 1);
+            int imm19_12 = extract(instruction, 12, 8);
+            int imm_complete = (imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1);
+            int imm = sign_extended(imm_complete, 21);
+            int rd = extract(instruction, 7, 5);
+
+            uint32_t dest = cpu->pc + imm;
+            
+            if (rd != 0) {
+                cpu->reg[rd] = cpu->pc + 4;
+            }
+
+            cpu->pc = dest;
+            break;
+        }
+        case OPCODE_I_JUMP_TYPE: {
+            int imm = sign_extended(extract(instruction, 20, 12), 12);
+            int rd = extract(instruction, 7, 5);
+            int rs1 = extract(instruction, 15, 5);
+
+            uint32_t dest = (cpu->reg[rs1] + imm) & ~1;
+            
+            if (rd != 0) {
+                cpu->reg[rd] = cpu->pc + 4;
+            }
+
+            cpu->pc = dest;
+            break;
+        }
         default: {
             break;
         }

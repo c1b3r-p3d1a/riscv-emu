@@ -4,19 +4,18 @@
 int main(void) {
     CPU cpu;
     cpu_init(&cpu);
+    cpu.reg[1] = 0x244;   // simula que 'ra' ya tiene guardada la dirección de retorno
 
-    cpu.memory[0] = 0x13;
-    cpu.memory[1] = 0x01;
-    cpu.memory[2] = 0x02;
-    cpu.memory[3] = 0x02;
+    cpu.memory[0] = 0x67;
+    cpu.memory[1] = 0x80;
+    cpu.memory[2] = 0x00;
+    cpu.memory[3] = 0x00;
+    cpu.pc = 0;   // <- corregido, igual que en JAL
 
-    cpu.reg[15] = 10;
-    cpu.reg[14] = 32;
-    
-    for (int i = 0; i < 1; i++) {
-        uint32_t instruction = cpu_fetch(&cpu);
-        cpu_decode_execute(&cpu, instruction);
-    }
+    uint32_t instr2 = cpu_fetch(&cpu);
+    cpu_decode_execute(&cpu, instr2);
+
+    printf("Tras JALR -> pc = 0x%X (esperado: 0x244)\n", cpu.pc);
 
     return 0;
 }
