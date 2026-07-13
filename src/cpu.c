@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include "cpu.h"
 
 void cpu_init(CPU *cpu) {
@@ -51,161 +52,187 @@ void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes) {
     }
 }
 
-void add(CPU *cpu, int rd, int rs1, int rs2) {
+bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2) {
+    switch (func3) {
+        case 0b000: {
+            return val_rs1 == val_rs2;
+        }
+        case 0b001: {
+            return (val_rs1 != val_rs2) ? true : false;
+        }
+        case 0b100: {
+            return ((int32_t)val_rs1 < (int32_t)val_rs2) ? true : false;
+        }
+        case 0b101: {
+            return ((int32_t)val_rs1 >= (int32_t)val_rs2) ? true : false;
+        }
+        case 0b110: {
+            return (val_rs1 < val_rs2) ? true : false;
+        }
+        case 0b111: {
+            return (val_rs1 >= val_rs2) ? true : false; 
+        }
+        default: {
+            return false;
+        }
+    }
+}
+
+static void add(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] + cpu->reg[rs2];
     }
 }
 
-void sub(CPU *cpu, int rd, int rs1, int rs2) {
+static void sub(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] - cpu->reg[rs2];
     }
 }
 
-void xor_op(CPU *cpu, int rd, int rs1, int rs2) {
+static void xor_op(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] ^ cpu->reg[rs2];
     }
 }
 
-void or_op(CPU *cpu, int rd, int rs1, int rs2) {
+static void or_op(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] | cpu->reg[rs2];
     }
 }
 
-void and_op(CPU *cpu, int rd, int rs1, int rs2) {
+static void and_op(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] & cpu->reg[rs2];
     }
 }
 
-void sll(CPU *cpu, int rd, int rs1, int rs2) {
+static void sll(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] << (cpu->reg[rs2] & 0x1F);
     }
 }
 
-void srl(CPU *cpu, int rd, int rs1, int rs2) {
+static void srl(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] >> (cpu->reg[rs2] & 0x1F);
     }
 }
 
-void sra(CPU *cpu, int rd, int rs1, int rs2) {
+static void sra(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = (int32_t)(cpu->reg[rs1]) >> (cpu->reg[rs2] & 0x1F);
     }
 }
 
-void slt(CPU *cpu, int rd, int rs1, int rs2) {
+static void slt(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = ((int32_t)(cpu->reg[rs1]) < (int32_t)(cpu->reg[rs2]) ? 1 : 0);
     }
 }
 
-void sltu(CPU *cpu, int rd, int rs1, int rs2) {
+static void sltu(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = (cpu->reg[rs1] < cpu->reg[rs2] ? 1 : 0);
     }
 }
 
-void addi(CPU *cpu, int rd, int rs1, int imm) {
+static void addi(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] + (uint32_t)imm;
     }
 }
 
-void xori(CPU *cpu, int rd, int rs1, int imm) {
+static void xori(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] ^ (uint32_t)imm;
     }
 }
 
-void ori(CPU *cpu, int rd, int rs1, int imm) {
+static void ori(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] | (uint32_t)imm;
     }
 }
 
-void andi(CPU *cpu, int rd, int rs1, int imm) {
+static void andi(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] & (uint32_t)imm;
     }
 }
 
-void slli(CPU *cpu, int rd, int rs1, int imm) {
+static void slli(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] << (imm & 0x1F);
     }
 }
 
-void srli(CPU *cpu, int rd, int rs1, int imm) {
+static void srli(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] >> (imm & 0x1F);
     }
 }
 
-void srai(CPU *cpu, int rd, int rs1, int imm) {
+static void srai(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = (int32_t)(cpu->reg[rs1]) >> (imm & 0x1F);
     }
 }
 
-void slti(CPU *cpu, int rd, int rs1, int imm) {
+static void slti(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = ((int32_t)(cpu->reg[rs1]) < (int32_t)(imm) ? 1 : 0);
     }
 }
 
-void sltiu(CPU *cpu, int rd, int rs1, int imm) {
+static void sltiu(CPU *cpu, int rd, int rs1, int imm) {
     if (rd != 0) {
         cpu->reg[rd] = (cpu->reg[rs1] < (uint32_t)imm) ? 1 : 0;
     }
 }
 
-void lb(CPU *cpu, int rd, int addr) {
+static void lb(CPU *cpu, int rd, int addr) {
     if (rd != 0) {
         uint32_t read = read_memory(cpu, addr, 1);
         cpu->reg[rd] = sign_extended(read, 8);
     }
 }
 
-void lh(CPU *cpu, int rd, int addr) {
+static void lh(CPU *cpu, int rd, int addr) {
     if (rd != 0) {
         uint32_t read = read_memory(cpu, addr, 2);
         cpu->reg[rd] = sign_extended(read, 16);
     }
 }
 
-void lw(CPU *cpu, int rd, int addr) {
+static void lw(CPU *cpu, int rd, int addr) {
     if (rd != 0) {
         cpu->reg[rd] = read_memory(cpu, addr, 4);
     }
 }
 
-void lbu(CPU *cpu, int rd, int addr) {
+static void lbu(CPU *cpu, int rd, int addr) {
     if (rd != 0) {
         cpu->reg[rd] = read_memory(cpu, addr, 1);
     }
 }
 
-void lhu(CPU *cpu, int rd, int addr) {
+static void lhu(CPU *cpu, int rd, int addr) {
     if (rd != 0) {
         cpu->reg[rd] = read_memory(cpu, addr, 2);
     }
 }
 
-void sb(CPU *cpu, int rs2, int addr) {
+static void sb(CPU *cpu, int rs2, int addr) {
     write_memory(cpu, addr, cpu->reg[rs2], 1);
 }
 
-void sh(CPU *cpu, int rs2, int addr) {
+static void sh(CPU *cpu, int rs2, int addr) {
     write_memory(cpu, addr, cpu->reg[rs2], 2);
 }
 
-void sw(CPU *cpu, int rs2, int addr) {
+static void sw(CPU *cpu, int rs2, int addr) {
     write_memory(cpu, addr, cpu->reg[rs2], 4);
 }
 
@@ -245,6 +272,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b011) {
                 sltu(cpu, rd, rs1, rs2);
             }
+            cpu->pc += 4;
             break;
         }
         case OPCODE_I_ARITHMETIC_TYPE: {
@@ -276,6 +304,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b011) {
                 sltiu(cpu, rd, rs1, imm);
             }
+            cpu->pc += 4;
             break;
         }
         case OPCODE_I_LOAD_TYPE: {
@@ -296,6 +325,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b101) {
                 lhu(cpu, rd, addr);
             }
+            cpu->pc += 4;
             break;
         }
         case OPCODE_S_TYPE: {
@@ -315,7 +345,25 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b010) {
                 sw(cpu, rs2, addr);
             }
+            cpu->pc += 4;
+            break;
+        }
+        case OPCODE_B_TYPE: {
+            int func3 = extract(instruction, 12, 3);
+            int imm12 = extract(instruction, 31, 1);
+            int imm10_5 = extract(instruction, 25, 6);
+            int imm4_1 = extract(instruction, 8, 4);
+            int imm11 = extract(instruction, 7, 1);
+            int imm_complete = (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1);
+            int imm = sign_extended(imm_complete, 13);
+            int rs1 = extract(instruction, 15, 5);
+            int rs2 = extract(instruction, 20, 5);
 
+            if (evaluate_condition(func3, cpu->reg[rs1], cpu->reg[rs2])) {
+                cpu->pc += imm;
+            } else {
+                cpu->pc += 4;
+            }
             break;
         }
         default: {

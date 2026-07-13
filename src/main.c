@@ -16,7 +16,6 @@ int main(void) {
     for (int i = 0; i < 1; i++) {
         uint32_t instruction = cpu_fetch(&cpu);
         cpu_decode_execute(&cpu, instruction);
-        cpu.pc += 4;
     }
 
     return 0;
