@@ -15,6 +15,8 @@ bool load_elf(CPU *cpu, const char *file_path, uint32_t *entry_point_out) {
     FILE *f = fopen(file_path, "rb");
 
     if (f==NULL) {
+        fclose(f);
+        
         return false;
     }
 
