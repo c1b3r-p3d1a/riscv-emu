@@ -236,6 +236,42 @@ static void sw(CPU *cpu, int rs2, int addr) {
     write_memory(cpu, addr, cpu->reg[rs2], 4);
 }
 
+static void mul(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        cpu->reg[rd] = cpu->reg[rs1] * cpu->reg[rs2];
+    }
+}
+
+static void mulh(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        int64_t val1 = (int64_t)(int32_t)cpu->reg[rs1];
+        int64_t val2 = (int64_t)(int32_t)cpu->reg[rs2];
+        int64_t result = val1 * val2;
+
+        cpu->reg[rd] = (int32_t)(result >> 32);
+    }
+}
+
+static void mulhsu(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        int64_t val1 = (int64_t)(int32_t)cpu->reg[rs1];
+        uint64_t val2 = (uint64_t)(uint32_t)cpu->reg[rs2];
+        int64_t result = val1 * (int64_t)val2;
+
+        cpu->reg[rd] = (uint32_t)((uint64_t)result >> 32);
+    }
+}
+
+static void mulhu(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        uint64_t val1 = (uint64_t)(uint32_t)cpu->reg[rs1];
+        uint64_t val2 = (uint64_t)(uint32_t)cpu->reg[rs2];
+        uint64_t result = val1 * val2;
+
+        cpu->reg[rd] = (uint32_t)(result >> 32);
+    }
+}
+
 void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
     int opcode = extract(instruction, 0, 7);
     
@@ -248,10 +284,12 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             int rs2 = extract(instruction, 20, 5);
 
             if (func3 == 0b000) {
-                if (func7 == 0b000000) {
+                if (func7 == 0b0000000) {
                     add(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b100000) {
+                } else if (func7 == 0b0100000) {
                     sub(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    mul(cpu, rd, rs1, rs2);
                 }
             } else if (func3 == 0b100) {
                 xor_op(cpu, rd, rs1, rs2);
@@ -260,17 +298,29 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             } else if (func3 == 0b111) {
                 and_op(cpu, rd, rs1, rs2);
             } else if (func3 == 0b001) {
-                sll(cpu, rd, rs1, rs2);
+                if (func7 == 0b0000000) {
+                    sll(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    mulh(cpu, rd, rs1, rs2);
+                }
             } else if (func3 == 0b101) {
-                if (func7 == 0b000000) {
+                if (func7 == 0b0000000) {
                     srl(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b100000) {
+                } else if (func7 == 0b0100000) {
                     sra(cpu, rd, rs1, rs2);
                 }
             } else if (func3 == 0b010) {
-                slt(cpu, rd, rs1, rs2);
+                if (func7 == 0b0000000) {
+                    slt(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    mulhsu(cpu, rd, rs1, rs2);
+                }
             } else if (func3 == 0b011) {
-                sltu(cpu, rd, rs1, rs2);
+                if (func7 == 0b0000000) {
+                    sltu(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    mulhu(cpu, rd, rs1, rs2);
+                }
             }
             cpu->pc += 4;
             break;
@@ -294,7 +344,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
                 } else if (func3 == 0b001) {
                     slli(cpu, rd, rs1, shamt);
                 } else if (func3 == 0b101) {
-                    if (func7 == 0b000000) {
+                    if (func7 == 0b0000000) {
                         srli(cpu, rd, rs1, shamt);
                     } else if (func7 == 0b0100000) {
                         srai(cpu, rd, rs1, shamt);
