@@ -24,18 +24,16 @@ int main(int argc, char *argv[]) {
     cpu.pc = entry_point;
 
     int MAX_CYCLES = 10000;
+    bool terminated = false;
 
     for (int cycle = 0; cycle < MAX_CYCLES; cycle++) {
-        uint32_t pc_before = cpu.pc;
-
         uint32_t instruction = cpu_fetch(&cpu);
-        cpu_decode_execute(&cpu, instruction);
+        cpu_decode_execute(&cpu, instruction, &terminated);
 
-        printf("ciclo=%d pc=0x%X sp=0x%X\n", cycle, cpu.pc, cpu.reg[2]);
+        // printf("cycle=%d pc=0x%X sp=0x%X\n", cycle, cpu.pc, cpu.reg[2]);
         
-        if (cpu.pc == pc_before) {
-            printf("Program finished (program counter unchanged). Exiting...\n");
-            printf("Value [0x11118] = %d\n", *(int32_t*)&cpu.memory[0x11118]);
+        if (terminated) {
+            printf("Program finished (syscall). Exiting...\n");
             
             return 0;
         }

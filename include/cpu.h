@@ -15,7 +15,8 @@ enum {
     OPCODE_U_LOAD_TYPE = 0x37,
     OPCODE_U_ADD_TYPE = 0x17,
     OPCODE_J_TYPE = 0x6F,
-    OPCODE_I_JUMP_TYPE = 0x67
+    OPCODE_I_JUMP_TYPE = 0x67,
+    OPCODE_SYSTEM = 0x73
 };
 
 typedef struct {
@@ -26,7 +27,7 @@ typedef struct {
 
 void cpu_init(CPU *cpu);
 uint32_t cpu_fetch(CPU *cpu);
-void cpu_decode_execute(CPU *cpu, uint32_t instruction);
+void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated);
 uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes);
 void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes);
 bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2);

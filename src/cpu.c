@@ -272,9 +272,67 @@ static void mulhu(CPU *cpu, int rd, int rs1, int rs2) {
     }
 }
 
-void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
+static void div_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        int32_t dividend = (int32_t)cpu->reg[rs1];
+        int32_t divider = (int32_t)cpu->reg[rs2];
+
+        if (divider == 0) {
+            cpu->reg[rd] = (uint32_t)-1;
+        } else if (dividend == INT32_MIN && divider == -1) {
+            cpu->reg[rd] = (uint32_t)INT32_MIN;
+        } else {
+            cpu->reg[rd] = (uint32_t)(dividend / divider);
+        }
+    }
+}
+
+static void rem_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        int32_t dividend = (int32_t)cpu->reg[rs1];
+        int32_t divider = (int32_t)cpu->reg[rs2];
+
+        if (divider == 0) {
+            cpu->reg[rd] = (uint32_t)dividend;
+        } else if (dividend == INT32_MIN && divider == -1) {
+            cpu->reg[rd] = 0;
+        } else {
+            cpu->reg[rd] = (uint32_t)(dividend % divider);
+        }
+    }
+}
+
+static void divu_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        uint32_t dividend = cpu->reg[rs1];
+        uint32_t divider = cpu->reg[rs2];
+
+        if (divider == 0) {
+            cpu->reg[rd] = (uint32_t)-1;
+        } else {
+            cpu->reg[rd] = (uint32_t)(dividend / divider);
+        }
+    }
+}
+
+static void remu_op(CPU *cpu, int rd, int rs1, int rs2) {
+    if (rd != 0) {
+        uint32_t dividend = cpu->reg[rs1];
+        uint32_t divider = cpu->reg[rs2];
+
+        if (divider == 0) {
+            cpu->reg[rd] = (uint32_t)dividend;
+        } else {
+            cpu->reg[rd] = (uint32_t)(dividend % divider);
+        }
+    }
+}
+
+
+void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
     int opcode = extract(instruction, 0, 7);
-    
+    *terminated = false;
+
     switch (opcode) {
         case OPCODE_R_TYPE: {
             int func3 = extract(instruction, 12, 3);
@@ -292,11 +350,23 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
                     mul(cpu, rd, rs1, rs2);
                 }
             } else if (func3 == 0b100) {
-                xor_op(cpu, rd, rs1, rs2);
+                if (func7 == 0b0000000) {
+                    xor_op(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    div_op(cpu, rd, rs1, rs2);
+                }
             } else if (func3 == 0b110) {
-                or_op(cpu, rd, rs1, rs2);
+                if (func7 == 0b0000000) {
+                    or_op(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    rem_op(cpu, rd, rs1, rs2);
+                }
             } else if (func3 == 0b111) {
-                and_op(cpu, rd, rs1, rs2);
+                if (func7 == 0b0000000) {
+                    and_op(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    remu_op(cpu, rd, rs1, rs2);
+                }
             } else if (func3 == 0b001) {
                 if (func7 == 0b0000000) {
                     sll(cpu, rd, rs1, rs2);
@@ -308,6 +378,8 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
                     srl(cpu, rd, rs1, rs2);
                 } else if (func7 == 0b0100000) {
                     sra(cpu, rd, rs1, rs2);
+                } else if (func7 == 0b0000001) {
+                    divu_op(cpu, rd, rs1, rs2);
                 }
             } else if (func3 == 0b010) {
                 if (func7 == 0b0000000) {
@@ -467,6 +539,28 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction) {
             }
 
             cpu->pc = dest;
+            break;
+        }
+        case OPCODE_SYSTEM: {
+            int func3 = extract(instruction, 12, 3);
+            int imm = sign_extended(extract(instruction, 20, 12), 12);
+
+            if (func3 == 0b000) {
+                if (imm == 0b000) {
+                    uint32_t num_syscall = cpu->reg[17];
+                    uint32_t arg = cpu->reg[10];
+
+                    if (num_syscall == 1) {
+                        putchar((char)arg);
+                    } else if (num_syscall == 2) {
+                        *terminated = true;
+                    }
+                } else if (imm == 0b001) {
+                    // ebreak
+                }
+            }
+
+            cpu->pc += 4;
             break;
         }
         default: {
