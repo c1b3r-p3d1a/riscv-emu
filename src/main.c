@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
     cpu.reg[2] = MEM_SIZE - 4;
     cpu.pc = entry_point;
 
-    int MAX_CYCLES = 10000;
+    int MAX_CYCLES = 100000;
     bool terminated = false;
 
     for (int cycle = 0; cycle < MAX_CYCLES; cycle++) {

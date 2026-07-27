@@ -23,6 +23,7 @@ typedef struct {
     uint32_t reg[32];
     uint32_t pc;
     uint8_t memory[MEM_SIZE];
+    uint32_t csr[4096];
 } CPU;
 
 void cpu_init(CPU *cpu);

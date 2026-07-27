@@ -328,6 +328,38 @@ static void remu_op(CPU *cpu, int rd, int rs1, int rs2) {
     }
 }
 
+static void csrrw(CPU *cpu, int rd, uint32_t valor, int csr) {
+    if (rd != 0) {
+        uint32_t value = cpu->csr[csr];
+        cpu->reg[rd] = value;
+    }
+
+    cpu->csr[csr] = valor;
+}
+
+static void csrrs(CPU *cpu, int rd, uint32_t valor, int csr) {
+    uint32_t value = cpu->csr[csr];
+    
+    if (rd != 0) {
+        cpu->reg[rd] = value;
+    }
+
+    if (valor != 0) {
+        cpu->csr[csr] = value | valor;
+    }
+}
+
+static void csrrc(CPU *cpu, int rd, uint32_t valor, int csr) {
+    uint32_t value = cpu->csr[csr];
+    
+    if (rd != 0) {
+        cpu->reg[rd] = value;
+    }
+
+    if (valor != 0) {
+        cpu->csr[csr] = value & ~(valor);
+    }
+}
 
 void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
     int opcode = extract(instruction, 0, 7);
@@ -544,6 +576,9 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
         case OPCODE_SYSTEM: {
             int func3 = extract(instruction, 12, 3);
             int imm = sign_extended(extract(instruction, 20, 12), 12);
+            int rd = extract(instruction, 7, 5);
+            int rs1 = extract(instruction, 15, 5);
+            int csr = extract(instruction, 20, 12);
 
             if (func3 == 0b000) {
                 if (imm == 0b000) {
@@ -558,6 +593,18 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
                 } else if (imm == 0b001) {
                     // ebreak
                 }
+            } else if (func3 == 0b001) {
+                csrrw(cpu, rd, cpu->reg[rs1], csr); 
+            } else if (func3 == 0b010) {
+                csrrs(cpu, rd, cpu->reg[rs1], csr);
+            } else if (func3 == 0b011) {
+                csrrc(cpu, rd, cpu->reg[rs1], csr);
+            } else if (func3 == 0b101) {
+                csrrw(cpu, rd, (uint32_t)rs1, csr);
+            } else if (func3 == 0b110) {
+                csrrs(cpu, rd, (uint32_t)rs1, csr);
+            } else if (func3 == 0b111) {
+                csrrc(cpu, rd, (uint32_t)rs1, csr);
             }
 
             cpu->pc += 4;
