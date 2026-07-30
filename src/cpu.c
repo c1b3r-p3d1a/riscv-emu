@@ -10,6 +10,7 @@ void cpu_init(CPU *cpu) {
     for (int i = 0; i < MEM_SIZE; i++) {
         cpu->memory[i] = 0;
     }
+    cpu->mode = 3;
 }
 
 uint32_t cpu_fetch(CPU *cpu) {
@@ -76,6 +77,14 @@ bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2) {
             return false;
         }
     }
+}
+
+static uint32_t get_field(uint32_t val, int pos, int len) {
+    return (val >> pos) & ((1 << len) - 1);
+}
+
+static uint32_t set_field(uint32_t val, int pos, int len, uint32_t new) {
+    return  ((val) & ~(((1 << len) - 1) << pos)) | (new << pos);
 }
 
 static void add(CPU *cpu, int rd, int rs1, int rs2) {
@@ -588,21 +597,29 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
 
             if (func3 == 0b000) {
                 if (imm == 0b000) {
-                    // uint32_t num_syscall = cpu->reg[17];
-                    // uint32_t arg = cpu->reg[10];
+                    uint32_t mcause_val = (cpu->mode == 3) ? 11 : 8;
 
-                    // if (num_syscall == 1) {
-                    //     putchar((char)arg);
-                    // } else if (num_syscall == 2) {
-                    //     *terminated = true;
-                    // }
+                    uint32_t mie = get_field(cpu->csr[MSTATUS], 3, 1);
+
+                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, cpu->mode);   // MPP
+                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, mie);         // MPIE
+                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 3, 1, 0);          // MIE
+
+                    cpu->mode = 3;
+
                     cpu->csr[MEPC] = cpu->pc;
-                    cpu->csr[MCAUSE] = 11;
+                    cpu->csr[MCAUSE] = mcause_val;
                     cpu->pc = cpu->csr[MTVEC];
                 } else if (imm == 0b001) {
                     // ebreak
                 } else if (imm == 0b1100000010) {
                     cpu->pc = cpu->csr[MEPC];
+                    
+                    cpu->mode = get_field(cpu->csr[MSTATUS], 11, 2);
+                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 3, 1, get_field(cpu->csr[MSTATUS], 7, 1));
+                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, 1);
+
+                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, 0);
                 }
             } else if (func3 == 0b001) {
                 csrrw(cpu, rd, cpu->reg[rs1], csr); 

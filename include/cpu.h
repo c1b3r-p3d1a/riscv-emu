@@ -17,9 +17,11 @@ enum {
     OPCODE_J_TYPE = 0x6F,
     OPCODE_I_JUMP_TYPE = 0x67,
     OPCODE_SYSTEM = 0x73,
+    
     MEPC = 0x341,
     MCAUSE = 0x342,
-    MTVEC = 0x305
+    MTVEC = 0x305,
+    MSTATUS = 0x300
 };
 
 typedef struct {
@@ -27,6 +29,7 @@ typedef struct {
     uint32_t pc;
     uint8_t memory[MEM_SIZE];
     uint32_t csr[4096];
+    int mode;
 } CPU;
 
 void cpu_init(CPU *cpu);
