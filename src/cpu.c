@@ -492,12 +492,18 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             int rs2 = extract(instruction, 20, 5);
             int addr = cpu->reg[rs1] + imm;
 
-            if (func3 == 0b000) {
-                sb(cpu, rs2, addr);
-            } else if (func3 == 0b001) {
-                sh(cpu, rs2, addr);
-            } else if (func3 == 0b010) {
-                sw(cpu, rs2, addr);
+            if (addr == 0x10000000) {
+                putchar((char)cpu->reg[rs2]);
+            } else if ((addr == 0x100000) && (cpu->reg[rs2] == 0x5555)) {
+                *terminated = true;
+            } else {
+                if (func3 == 0b000) {
+                    sb(cpu, rs2, addr);
+                } else if (func3 == 0b001) {
+                    sh(cpu, rs2, addr);
+                } else if (func3 == 0b010) {
+                    sw(cpu, rs2, addr);
+                }
             }
             cpu->pc += 4;
             break;
@@ -582,32 +588,42 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
 
             if (func3 == 0b000) {
                 if (imm == 0b000) {
-                    uint32_t num_syscall = cpu->reg[17];
-                    uint32_t arg = cpu->reg[10];
+                    // uint32_t num_syscall = cpu->reg[17];
+                    // uint32_t arg = cpu->reg[10];
 
-                    if (num_syscall == 1) {
-                        putchar((char)arg);
-                    } else if (num_syscall == 2) {
-                        *terminated = true;
-                    }
+                    // if (num_syscall == 1) {
+                    //     putchar((char)arg);
+                    // } else if (num_syscall == 2) {
+                    //     *terminated = true;
+                    // }
+                    cpu->csr[MEPC] = cpu->pc;
+                    cpu->csr[MCAUSE] = 11;
+                    cpu->pc = cpu->csr[MTVEC];
                 } else if (imm == 0b001) {
                     // ebreak
+                } else if (imm == 0b1100000010) {
+                    cpu->pc = cpu->csr[MEPC];
                 }
             } else if (func3 == 0b001) {
                 csrrw(cpu, rd, cpu->reg[rs1], csr); 
+                cpu->pc += 4;
             } else if (func3 == 0b010) {
                 csrrs(cpu, rd, cpu->reg[rs1], csr);
+                cpu->pc += 4;
             } else if (func3 == 0b011) {
                 csrrc(cpu, rd, cpu->reg[rs1], csr);
+                cpu->pc += 4;
             } else if (func3 == 0b101) {
                 csrrw(cpu, rd, (uint32_t)rs1, csr);
+                cpu->pc += 4;
             } else if (func3 == 0b110) {
                 csrrs(cpu, rd, (uint32_t)rs1, csr);
+                cpu->pc += 4;
             } else if (func3 == 0b111) {
                 csrrc(cpu, rd, (uint32_t)rs1, csr);
+                cpu->pc += 4;
             }
 
-            cpu->pc += 4;
             break;
         }
         default: {

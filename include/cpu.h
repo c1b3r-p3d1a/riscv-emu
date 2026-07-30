@@ -16,7 +16,10 @@ enum {
     OPCODE_U_ADD_TYPE = 0x17,
     OPCODE_J_TYPE = 0x6F,
     OPCODE_I_JUMP_TYPE = 0x67,
-    OPCODE_SYSTEM = 0x73
+    OPCODE_SYSTEM = 0x73,
+    MEPC = 0x341,
+    MCAUSE = 0x342,
+    MTVEC = 0x305
 };
 
 typedef struct {
