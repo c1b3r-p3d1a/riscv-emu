@@ -552,24 +552,32 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             int rs1 = extract(instruction, 15, 5);
             uint32_t virt_addr = cpu->reg[rs1] + imm;
 
-            bool error;
-            uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_READ, &error);
-
-            if (error) {
-                trap(cpu, 13);
+            if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
+                trap(cpu, 4);
+            } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
+                trap(cpu, 4);
+            } else if ((func3 == 0b101) && (virt_addr % 2 != 0)) {
+                trap(cpu, 4);
             } else {
-                if (func3 == 0b000) {
-                    lb(cpu, rd, addr);
-                } else if (func3 == 0b001) {
-                    lh(cpu, rd, addr);
-                } else if (func3 == 0b010) {
-                    lw(cpu, rd, addr);
-                } else if (func3 == 0b100) {
-                    lbu(cpu, rd, addr);
-                } else if (func3 == 0b101) {
-                    lhu(cpu, rd, addr);
+                bool error;
+                uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_READ, &error);
+    
+                if (error) {
+                    trap(cpu, 13);
+                } else {
+                    if (func3 == 0b000) {
+                        lb(cpu, rd, addr);
+                    } else if (func3 == 0b001) {
+                        lh(cpu, rd, addr);
+                    } else if (func3 == 0b010) {
+                        lw(cpu, rd, addr);
+                    } else if (func3 == 0b100) {
+                        lbu(cpu, rd, addr);
+                    } else if (func3 == 0b101) {
+                        lhu(cpu, rd, addr);
+                    }
+                    cpu->pc += 4;
                 }
-                cpu->pc += 4;
             }
             break;
         }
@@ -583,27 +591,34 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             int rs2 = extract(instruction, 20, 5);
             uint32_t virt_addr = cpu->reg[rs1] + imm;
 
-            bool error;
-            uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error);
-
-            if (error) {
-                trap(cpu, 15);
+            if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
+                trap(cpu, 6);
+            } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
+                trap(cpu, 6);
             } else {
-                if (addr == 0x10000000) {
-                    putchar((char)cpu->reg[rs2]);
-                } else if ((addr == 0x100000) && (cpu->reg[rs2] == 0x5555)) {
-                    *terminated = true;
+                bool error;
+                uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error);
+    
+                if (error) {
+                    trap(cpu, 15);
                 } else {
-                    if (func3 == 0b000) {
-                        sb(cpu, rs2, addr);
-                    } else if (func3 == 0b001) {
-                        sh(cpu, rs2, addr);
-                    } else if (func3 == 0b010) {
-                        sw(cpu, rs2, addr);
+                    if (addr == 0x10000000) {
+                        putchar((char)cpu->reg[rs2]);
+                    } else if ((addr == 0x100000) && (cpu->reg[rs2] == 0x5555)) {
+                        *terminated = true;
+                    } else {
+                        if (func3 == 0b000) {
+                            sb(cpu, rs2, addr);
+                        } else if (func3 == 0b001) {
+                            sh(cpu, rs2, addr);
+                        } else if (func3 == 0b010) {
+                            sw(cpu, rs2, addr);
+                        }
                     }
+                    cpu->pc += 4;
                 }
-                cpu->pc += 4;
-            }
+            }  
+
 
             break;
         }
@@ -729,6 +744,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             break;
         }
         default: {
+            trap(cpu, 2);
             break;
         }
     }
