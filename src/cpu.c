@@ -13,11 +13,22 @@ void cpu_init(CPU *cpu) {
     cpu->mode = 3;
 }
 
-uint32_t cpu_fetch(CPU *cpu) {
-    uint32_t b0 = cpu->memory[cpu->pc + 0];
-    uint32_t b1 = cpu->memory[cpu->pc + 1];
-    uint32_t b2 = cpu->memory[cpu->pc + 2];
-    uint32_t b3 = cpu->memory[cpu->pc + 3];
+uint32_t cpu_fetch(CPU *cpu, bool *fail) {
+    bool error;
+    uint32_t physc_pc = translate_mmu(cpu, cpu->pc, ACCESS_EXEC, &error);
+
+    if (error) {
+        trap(cpu, 12);
+        *fail = true;
+        return 0;
+    }
+
+    *fail = false;
+
+    uint32_t b0 = cpu->memory[physc_pc + 0];
+    uint32_t b1 = cpu->memory[physc_pc + 1];
+    uint32_t b2 = cpu->memory[physc_pc + 2];
+    uint32_t b3 = cpu->memory[physc_pc + 3];
 
     return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
 }
@@ -110,6 +121,44 @@ void trap(CPU *cpu, uint32_t cause) {
         cpu->csr[MEPC] = cpu->pc;
         cpu->csr[MCAUSE] = cause;
         cpu->pc = cpu->csr[MTVEC];
+    }
+}
+
+uint32_t translate_mmu(CPU *cpu, uint32_t virt_addr, int access_t, bool *error) {
+    if (get_field(cpu->csr[SATP], 31, 1) == 0) {
+        *error = false;
+        return virt_addr;
+    } else {
+        uint32_t vpn1 = get_field(virt_addr, 22, 10);
+        uint32_t vpn0 = get_field(virt_addr, 12, 10);
+        uint32_t offset = get_field(virt_addr, 0, 12);
+
+        uint32_t level1_table = get_field(cpu->csr[SATP], 0, 22) * 4096;
+        uint32_t pte1 = read_memory(cpu, level1_table + vpn1*4, 4);
+
+        if (get_field(pte1, 0, 1) == 0) {
+            *error = true;
+            return 0;
+        }
+
+        uint32_t level2_table = get_field(pte1, 10, 22) * 4096;
+        uint32_t pte2 = read_memory(cpu, level2_table + vpn0*4, 4);
+
+        if ((get_field(pte2, 2, 1) == 1) && (get_field(pte2, 1, 1) == 0)) {
+            *error = true;
+            return 0;
+        } else if (get_field(pte2, access_t, 1) == 1) {
+            if (((get_field(pte2, 4, 1) == 0) && (cpu->mode == 0)) | ((get_field(pte2, 4, 1) == 1) && ((cpu->mode == 1) | (cpu->mode == 3)))) {
+                *error = true;
+                return 0;
+            }
+        } else {
+            *error = true;
+            return 0;
+        }
+
+        *error = false;
+        return (get_field(pte2, 10, 22) * 4096) + offset;
     }
 }
 

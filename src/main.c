@@ -27,10 +27,15 @@ int main(int argc, char *argv[]) {
     bool terminated = false;
 
     for (int cycle = 0; cycle < MAX_CYCLES; cycle++) {
-        uint32_t instruction = cpu_fetch(&cpu);
-        cpu_decode_execute(&cpu, instruction, &terminated);
+        bool fetch_fail;
+        
+        uint32_t instruction = cpu_fetch(&cpu, &fetch_fail);
 
-        // printf("cycle=%d pc=0x%X sp=0x%X\n", cycle, cpu.pc, cpu.reg[2]);
+        if (fetch_fail) {
+            continue;
+        }
+        
+        cpu_decode_execute(&cpu, instruction, &terminated);
         
         if (terminated) {
             printf("Program finished (syscall). Exiting...\n");
