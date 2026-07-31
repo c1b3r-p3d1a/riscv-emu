@@ -21,7 +21,13 @@ enum {
     MEPC = 0x341,
     MCAUSE = 0x342,
     MTVEC = 0x305,
-    MSTATUS = 0x300
+    MSTATUS = 0x300,
+    
+    SEPC = 0x141,
+    SCAUSE = 0x142,
+    STVEC = 0x105,
+    SSTATUS = 0x100,
+    MEDELEG = 0x302
 };
 
 typedef struct {
@@ -39,5 +45,6 @@ uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes);
 void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes);
 bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2);
 int32_t sign_extended(uint32_t val, int org_bits);
+void trap(CPU *cpu, uint32_t cause);
 
 #endif

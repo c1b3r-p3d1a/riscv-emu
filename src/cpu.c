@@ -87,6 +87,32 @@ static uint32_t set_field(uint32_t val, int pos, int len, uint32_t new) {
     return  ((val) & ~(((1 << len) - 1) << pos)) | (new << pos);
 }
 
+void trap(CPU *cpu, uint32_t cause) {
+    bool delegate = (cpu->mode != 3) && (get_field(cpu->csr[MEDELEG], cause, 1) == 1);
+
+    if (delegate) {
+        cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 8, 1, cpu->mode);
+        cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 5, 1, get_field(cpu->csr[SSTATUS], 1, 1));
+        cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 1, 1, 0);
+        
+        cpu->mode = 1;
+        
+        cpu->csr[SEPC] = cpu->pc;
+        cpu->csr[SCAUSE] = cause;
+        cpu->pc = cpu->csr[STVEC];
+    } else {
+        cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, cpu->mode);
+        cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, get_field(cpu->csr[MSTATUS], 3, 1));
+        cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 3, 1, 0);
+
+        cpu->mode = 3;
+
+        cpu->csr[MEPC] = cpu->pc;
+        cpu->csr[MCAUSE] = cause;
+        cpu->pc = cpu->csr[MTVEC];
+    }
+}
+
 static void add(CPU *cpu, int rd, int rs1, int rs2) {
     if (rd != 0) {
         cpu->reg[rd] = cpu->reg[rs1] + cpu->reg[rs2];
@@ -597,19 +623,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
 
             if (func3 == 0b000) {
                 if (imm == 0b000) {
-                    uint32_t mcause_val = (cpu->mode == 3) ? 11 : 8;
-
-                    uint32_t mie = get_field(cpu->csr[MSTATUS], 3, 1);
-
-                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, cpu->mode);   // MPP
-                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, mie);         // MPIE
-                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 3, 1, 0);          // MIE
-
-                    cpu->mode = 3;
-
-                    cpu->csr[MEPC] = cpu->pc;
-                    cpu->csr[MCAUSE] = mcause_val;
-                    cpu->pc = cpu->csr[MTVEC];
+                    trap(cpu, 8 + cpu->mode);
                 } else if (imm == 0b001) {
                     // ebreak
                 } else if (imm == 0b1100000010) {
@@ -620,6 +634,13 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
                     cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, 1);
 
                     cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, 0);
+                } else if (imm == 0b000100000010) {
+                    cpu->pc = cpu->csr[SEPC];
+
+                    cpu->mode = get_field(cpu->csr[SSTATUS], 8, 1);
+                    cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 1, 1, get_field(cpu->csr[SSTATUS], 5, 1));
+                    cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 5, 1, 1);
+                    cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 8, 1, 0);
                 }
             } else if (func3 == 0b001) {
                 csrrw(cpu, rd, cpu->reg[rs1], csr); 
