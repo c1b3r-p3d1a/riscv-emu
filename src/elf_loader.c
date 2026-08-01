@@ -2,11 +2,11 @@
 #include "cpu.h"
 #include "elf_loader.h"
 
-static uint32_t read_u32_le(uint8_t *buffer, int offset) {
+uint32_t read_u32_le(uint8_t *buffer, int offset) {
     return buffer[offset] | (buffer[offset+1] << 8) | (buffer[offset+2] << 16) | (buffer[offset+3] << 24);
 }
 
-static uint16_t read_u16_le(uint8_t *buffer, int offset) {
+uint16_t read_u16_le(uint8_t *buffer, int offset) {
     return buffer[offset] | (buffer[offset+1] << 8);
 }
 
