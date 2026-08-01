@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "cpu.h"
+#include "elf_loader.h"
 
 void cpu_init(CPU *cpu) {
     for (int i = 0; i < 32; i++) {
@@ -13,7 +14,7 @@ void cpu_init(CPU *cpu) {
     cpu->mode = 3;
 }
 
-uint32_t cpu_fetch(CPU *cpu, bool *fail) {
+uint32_t cpu_fetch(CPU *cpu, bool *fail, int *size) {
     bool error;
     uint32_t physc_pc = translate_mmu(cpu, cpu->pc, ACCESS_EXEC, &error);
 
@@ -23,14 +24,26 @@ uint32_t cpu_fetch(CPU *cpu, bool *fail) {
         return 0;
     }
 
-    *fail = false;
+    
+    uint16_t first_2_bytes = read_u16_le(&cpu->memory[physc_pc - MEM_BASE], 0);
+    
+    if ((first_2_bytes & 0b11) == 0b11) {
+        *size = 4;
 
-    uint32_t b0 = cpu->memory[(physc_pc - MEM_BASE) + 0];
-    uint32_t b1 = cpu->memory[(physc_pc - MEM_BASE) + 1];
-    uint32_t b2 = cpu->memory[(physc_pc - MEM_BASE) + 2];
-    uint32_t b3 = cpu->memory[(physc_pc - MEM_BASE) + 3];
+        uint32_t b0 = cpu->memory[(physc_pc - MEM_BASE) + 0];
+        uint32_t b1 = cpu->memory[(physc_pc - MEM_BASE) + 1];
+        uint32_t b2 = cpu->memory[(physc_pc - MEM_BASE) + 2];
+        uint32_t b3 = cpu->memory[(physc_pc - MEM_BASE) + 3];
 
-    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+        *fail = false;
+        return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+    } else {
+        *size = 2;
+
+        *fail = false;
+        return cpu->memory[(physc_pc - MEM_BASE)] | (cpu->memory[(physc_pc - MEM_BASE) + 1] << 8);
+    }
+    
 }
 
 static uint32_t extract(uint32_t instruction, int pos, int len) {
@@ -574,364 +587,368 @@ static void sc(CPU *cpu, int rd, int rs2, uint32_t addr) {
     cpu->reserve_active = false;
 }
 
-void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
+void cpu_decode_execute(CPU *cpu, uint32_t instruction, int instr_size, bool *terminated) {
     int opcode = extract(instruction, 0, 7);
     *terminated = false;
 
-    switch (opcode) {
-        case OPCODE_R_TYPE: {
-            int func3 = extract(instruction, 12, 3);
-            int func7 = extract(instruction, 25, 7);
-            int rd = extract(instruction, 7, 5);
-            int rs1 = extract(instruction, 15, 5);
-            int rs2 = extract(instruction, 20, 5);
+    if (instr_size == 2) {
+        trap(cpu, 2, false);
+    } else {
+        switch (opcode) {
+            case OPCODE_R_TYPE: {
+                int func3 = extract(instruction, 12, 3);
+                int func7 = extract(instruction, 25, 7);
+                int rd = extract(instruction, 7, 5);
+                int rs1 = extract(instruction, 15, 5);
+                int rs2 = extract(instruction, 20, 5);
 
-            if (func3 == 0b000) {
-                if (func7 == 0b0000000) {
-                    add(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0100000) {
-                    sub(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    mul(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b100) {
-                if (func7 == 0b0000000) {
-                    xor_op(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    div_op(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b110) {
-                if (func7 == 0b0000000) {
-                    or_op(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    rem_op(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b111) {
-                if (func7 == 0b0000000) {
-                    and_op(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    remu_op(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b001) {
-                if (func7 == 0b0000000) {
-                    sll(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    mulh(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b101) {
-                if (func7 == 0b0000000) {
-                    srl(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0100000) {
-                    sra(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    divu_op(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b010) {
-                if (func7 == 0b0000000) {
-                    slt(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    mulhsu(cpu, rd, rs1, rs2);
-                }
-            } else if (func3 == 0b011) {
-                if (func7 == 0b0000000) {
-                    sltu(cpu, rd, rs1, rs2);
-                } else if (func7 == 0b0000001) {
-                    mulhu(cpu, rd, rs1, rs2);
-                }
-            }
-            cpu->pc += 4;
-            break;
-        }
-        case OPCODE_I_ARITHMETIC_TYPE: {
-            int func3 = extract(instruction, 12, 3);
-            int func7 = extract(instruction, 25, 7);
-            int imm = sign_extended(extract(instruction, 20, 12), 12);
-            int rd = extract(instruction, 7, 5);
-            int rs1 = extract(instruction, 15, 5);
-            int shamt = extract(instruction, 20, 5);
-
-            if (func3 == 0b000) {
-                addi(cpu, rd, rs1, imm);
-            } else if (func3 == 0b100) {
-                xori(cpu, rd, rs1, imm);
-            } else if (func3 == 0b110) {
-                ori(cpu, rd, rs1, imm);
-            } else if (func3 == 0b111) {
-                andi(cpu, rd, rs1, imm);
+                if (func3 == 0b000) {
+                    if (func7 == 0b0000000) {
+                        add(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0100000) {
+                        sub(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        mul(cpu, rd, rs1, rs2);
+                    }
+                } else if (func3 == 0b100) {
+                    if (func7 == 0b0000000) {
+                        xor_op(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        div_op(cpu, rd, rs1, rs2);
+                    }
+                } else if (func3 == 0b110) {
+                    if (func7 == 0b0000000) {
+                        or_op(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        rem_op(cpu, rd, rs1, rs2);
+                    }
+                } else if (func3 == 0b111) {
+                    if (func7 == 0b0000000) {
+                        and_op(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        remu_op(cpu, rd, rs1, rs2);
+                    }
                 } else if (func3 == 0b001) {
-                    slli(cpu, rd, rs1, shamt);
+                    if (func7 == 0b0000000) {
+                        sll(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        mulh(cpu, rd, rs1, rs2);
+                    }
                 } else if (func3 == 0b101) {
                     if (func7 == 0b0000000) {
-                        srli(cpu, rd, rs1, shamt);
+                        srl(cpu, rd, rs1, rs2);
                     } else if (func7 == 0b0100000) {
-                        srai(cpu, rd, rs1, shamt);
+                        sra(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        divu_op(cpu, rd, rs1, rs2);
                     }
                 } else if (func3 == 0b010) {
-                slti(cpu, rd, rs1, imm);
-            } else if (func3 == 0b011) {
-                sltiu(cpu, rd, rs1, imm);
-            }
-            cpu->pc += 4;
-            break;
-        }
-        case OPCODE_I_LOAD_TYPE: {
-            int func3 = extract(instruction, 12, 3);
-            int imm = sign_extended(extract(instruction, 20, 12), 12);
-            int rd = extract(instruction, 7, 5);
-            int rs1 = extract(instruction, 15, 5);
-            uint32_t virt_addr = cpu->reg[rs1] + imm;
-
-            if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
-                trap(cpu, 4, false);
-            } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
-                trap(cpu, 4, false);
-            } else if ((func3 == 0b101) && (virt_addr % 2 != 0)) {
-                trap(cpu, 4, false);
-            } else {
-                bool error;
-                uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_READ, &error);
-    
-                if (error) {
-                    trap(cpu, 13, false);
-                } else {
-                    if (addr == 0x0200BFF8) {
-                        if (rd != 0) {
-                            cpu->reg[rd] = (uint32_t)cpu->mtime;
-                        }
-                    } else {
-                        if (func3 == 0b000) {
-                            lb(cpu, rd, addr);
-                        } else if (func3 == 0b001) {
-                            lh(cpu, rd, addr);
-                        } else if (func3 == 0b010) {
-                            lw(cpu, rd, addr);
-                        } else if (func3 == 0b100) {
-                            lbu(cpu, rd, addr);
-                        } else if (func3 == 0b101) {
-                            lhu(cpu, rd, addr);
-                        }
+                    if (func7 == 0b0000000) {
+                        slt(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        mulhsu(cpu, rd, rs1, rs2);
                     }
-                    cpu->pc += 4;
+                } else if (func3 == 0b011) {
+                    if (func7 == 0b0000000) {
+                        sltu(cpu, rd, rs1, rs2);
+                    } else if (func7 == 0b0000001) {
+                        mulhu(cpu, rd, rs1, rs2);
+                    }
                 }
+                cpu->pc += instr_size;
+                break;
             }
-            break;
-        }
-        case OPCODE_S_TYPE: {
-            int func3 = extract(instruction, 12, 3);
-            int imm_high = extract(instruction, 25, 7);
-            int imm_low = extract(instruction, 7, 5);
-            int imm_complete = (imm_high << 5) | imm_low;
-            int imm = sign_extended(imm_complete, 12);
-            int rs1 = extract(instruction, 15, 5);
-            int rs2 = extract(instruction, 20, 5);
-            uint32_t virt_addr = cpu->reg[rs1] + imm;
+            case OPCODE_I_ARITHMETIC_TYPE: {
+                int func3 = extract(instruction, 12, 3);
+                int func7 = extract(instruction, 25, 7);
+                int imm = sign_extended(extract(instruction, 20, 12), 12);
+                int rd = extract(instruction, 7, 5);
+                int rs1 = extract(instruction, 15, 5);
+                int shamt = extract(instruction, 20, 5);
 
-            if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
-                trap(cpu, 6, false);
-            } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
-                trap(cpu, 6, false);
-            } else {
-                bool error;
-                uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error);
-    
-                if (error) {
+                if (func3 == 0b000) {
+                    addi(cpu, rd, rs1, imm);
+                } else if (func3 == 0b100) {
+                    xori(cpu, rd, rs1, imm);
+                } else if (func3 == 0b110) {
+                    ori(cpu, rd, rs1, imm);
+                } else if (func3 == 0b111) {
+                    andi(cpu, rd, rs1, imm);
+                    } else if (func3 == 0b001) {
+                        slli(cpu, rd, rs1, shamt);
+                    } else if (func3 == 0b101) {
+                        if (func7 == 0b0000000) {
+                            srli(cpu, rd, rs1, shamt);
+                        } else if (func7 == 0b0100000) {
+                            srai(cpu, rd, rs1, shamt);
+                        }
+                    } else if (func3 == 0b010) {
+                    slti(cpu, rd, rs1, imm);
+                } else if (func3 == 0b011) {
+                    sltiu(cpu, rd, rs1, imm);
+                }
+                cpu->pc += instr_size;
+                break;
+            }
+            case OPCODE_I_LOAD_TYPE: {
+                int func3 = extract(instruction, 12, 3);
+                int imm = sign_extended(extract(instruction, 20, 12), 12);
+                int rd = extract(instruction, 7, 5);
+                int rs1 = extract(instruction, 15, 5);
+                uint32_t virt_addr = cpu->reg[rs1] + imm;
+
+                if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
+                    trap(cpu, 4, false);
+                } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
+                    trap(cpu, 4, false);
+                } else if ((func3 == 0b101) && (virt_addr % 2 != 0)) {
+                    trap(cpu, 4, false);
+                } else {
+                    bool error;
+                    uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_READ, &error);
+        
+                    if (error) {
+                        trap(cpu, 13, false);
+                    } else {
+                        if (addr == 0x0200BFF8) {
+                            if (rd != 0) {
+                                cpu->reg[rd] = (uint32_t)cpu->mtime;
+                            }
+                        } else {
+                            if (func3 == 0b000) {
+                                lb(cpu, rd, addr);
+                            } else if (func3 == 0b001) {
+                                lh(cpu, rd, addr);
+                            } else if (func3 == 0b010) {
+                                lw(cpu, rd, addr);
+                            } else if (func3 == 0b100) {
+                                lbu(cpu, rd, addr);
+                            } else if (func3 == 0b101) {
+                                lhu(cpu, rd, addr);
+                            }
+                        }
+                        cpu->pc += instr_size;
+                    }
+                }
+                break;
+            }
+            case OPCODE_S_TYPE: {
+                int func3 = extract(instruction, 12, 3);
+                int imm_high = extract(instruction, 25, 7);
+                int imm_low = extract(instruction, 7, 5);
+                int imm_complete = (imm_high << 5) | imm_low;
+                int imm = sign_extended(imm_complete, 12);
+                int rs1 = extract(instruction, 15, 5);
+                int rs2 = extract(instruction, 20, 5);
+                uint32_t virt_addr = cpu->reg[rs1] + imm;
+
+                if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
+                    trap(cpu, 6, false);
+                } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
+                    trap(cpu, 6, false);
+                } else {
+                    bool error;
+                    uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error);
+        
+                    if (error) {
+                        trap(cpu, 15, false);
+                    } else {
+                        if (addr == 0x10000000) {
+                            putchar((char)cpu->reg[rs2]);
+                        } else if ((addr == 0x100000) && (cpu->reg[rs2] == 0x5555)) {
+                            *terminated = true;
+                        } else if (addr == 0x02004000) {
+                            cpu->mtimecmp = cpu->reg[rs2];
+                        } else {
+                            if (func3 == 0b000) {
+                                sb(cpu, rs2, addr);
+                            } else if (func3 == 0b001) {
+                                sh(cpu, rs2, addr);
+                            } else if (func3 == 0b010) {
+                                sw(cpu, rs2, addr);
+                            }
+                        }
+                        cpu->pc += instr_size;
+                    }
+                }  
+
+
+                break;
+            }
+            case OPCODE_B_TYPE: {
+                int func3 = extract(instruction, 12, 3);
+                int imm12 = extract(instruction, 31, 1);
+                int imm10_5 = extract(instruction, 25, 6);
+                int imm4_1 = extract(instruction, 8, 4);
+                int imm11 = extract(instruction, 7, 1);
+                int imm_complete = (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1);
+                int imm = sign_extended(imm_complete, 13);
+                int rs1 = extract(instruction, 15, 5);
+                int rs2 = extract(instruction, 20, 5);
+
+                if (evaluate_condition(func3, cpu->reg[rs1], cpu->reg[rs2])) {
+                    cpu->pc += imm;
+                } else {
+                    cpu->pc += instr_size;
+                }
+                break;
+            }
+            case OPCODE_U_LOAD_TYPE: {
+                int imm = extract(instruction, 12, 20) << 12;
+                int rd = extract(instruction, 7, 5);
+
+                if (rd != 0) {
+                    cpu->reg[rd] = imm;
+                }
+                
+                cpu->pc += instr_size;
+                break;
+            }
+            case OPCODE_U_ADD_TYPE: {
+                int imm = extract(instruction, 12, 20) << 12;
+                int rd = extract(instruction, 7, 5);
+                
+                if (rd != 0) {
+                    cpu->reg[rd] = cpu->pc + imm;
+                }
+                cpu->pc += instr_size;
+                break;
+            }
+            case OPCODE_J_TYPE: {
+                int imm20 = extract(instruction, 31, 1);
+                int imm10_1 = extract(instruction, 21, 10);
+                int imm11 = extract(instruction, 20, 1);
+                int imm19_12 = extract(instruction, 12, 8);
+                int imm_complete = (imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1);
+                int imm = sign_extended(imm_complete, 21);
+                int rd = extract(instruction, 7, 5);
+
+                uint32_t dest = cpu->pc + imm;
+                
+                if (rd != 0) {
+                    cpu->reg[rd] = cpu->pc + instr_size;
+                }
+
+                cpu->pc = dest;
+                break;
+            }
+            case OPCODE_I_JUMP_TYPE: {
+                int imm = sign_extended(extract(instruction, 20, 12), 12);
+                int rd = extract(instruction, 7, 5);
+                int rs1 = extract(instruction, 15, 5);
+
+                uint32_t dest = (cpu->reg[rs1] + imm) & ~1;
+                
+                if (rd != 0) {
+                    cpu->reg[rd] = cpu->pc + instr_size;
+                }
+
+                cpu->pc = dest;
+                break;
+            }
+            case OPCODE_SYSTEM: {
+                int func3 = extract(instruction, 12, 3);
+                int imm = sign_extended(extract(instruction, 20, 12), 12);
+                int rd = extract(instruction, 7, 5);
+                int rs1 = extract(instruction, 15, 5);
+                int csr = extract(instruction, 20, 12);
+
+                if (func3 == 0b000) {
+                    if (imm == 0b000) {
+                        trap(cpu, 8 + cpu->mode, false);
+                    } else if (imm == 0b001) {
+                        // ebreak
+                    } else if (imm == 0b1100000010) {
+                        cpu->pc = cpu->csr[MEPC];
+                        
+                        cpu->mode = get_field(cpu->csr[MSTATUS], 11, 2);
+                        cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 3, 1, get_field(cpu->csr[MSTATUS], 7, 1));
+                        cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, 1);
+
+                        cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, 0);
+                    } else if (imm == 0b000100000010) {
+                        cpu->pc = cpu->csr[SEPC];
+
+                        cpu->mode = get_field(cpu->csr[SSTATUS], 8, 1);
+                        cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 1, 1, get_field(cpu->csr[SSTATUS], 5, 1));
+                        cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 5, 1, 1);
+                        cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 8, 1, 0);
+                    }
+                } else if (func3 == 0b001) {
+                    csrrw(cpu, rd, cpu->reg[rs1], csr); 
+                    cpu->pc += instr_size;
+                } else if (func3 == 0b010) {
+                    csrrs(cpu, rd, cpu->reg[rs1], csr);
+                    cpu->pc += instr_size;
+                } else if (func3 == 0b011) {
+                    csrrc(cpu, rd, cpu->reg[rs1], csr);
+                    cpu->pc += instr_size;
+                } else if (func3 == 0b101) {
+                    csrrw(cpu, rd, (uint32_t)rs1, csr);
+                    cpu->pc += instr_size;
+                } else if (func3 == 0b110) {
+                    csrrs(cpu, rd, (uint32_t)rs1, csr);
+                    cpu->pc += instr_size;
+                } else if (func3 == 0b111) {
+                    csrrc(cpu, rd, (uint32_t)rs1, csr);
+                    cpu->pc += instr_size;
+                }
+
+                break;
+            }
+            case OPCODE_MISC_MEM: {
+                cpu->pc += instr_size;
+                break;
+            }
+            case OPCODE_AMO: {
+                int func5 = extract(instruction, 27, 5);
+                int aq = extract(instruction, 26, 1);
+                int rl = extract(instruction, 25, 1);
+                int rs2 = extract(instruction, 20, 5);
+                int rs1 = extract(instruction, 15, 5);
+                int func3 = extract(instruction, 12, 3);
+                int rd = extract(instruction, 7, 5);
+                uint32_t virt_addr = cpu->reg[rs1];
+
+                bool error_r, error_w;
+                uint32_t addr_r = translate_mmu(cpu, virt_addr, ACCESS_READ, &error_r);
+                uint32_t addr_w = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error_w);
+
+                if (error_r || error_w) {
                     trap(cpu, 15, false);
                 } else {
-                    if (addr == 0x10000000) {
-                        putchar((char)cpu->reg[rs2]);
-                    } else if ((addr == 0x100000) && (cpu->reg[rs2] == 0x5555)) {
-                        *terminated = true;
-                    } else if (addr == 0x02004000) {
-                        cpu->mtimecmp = cpu->reg[rs2];
-                    } else {
-                        if (func3 == 0b000) {
-                            sb(cpu, rs2, addr);
-                        } else if (func3 == 0b001) {
-                            sh(cpu, rs2, addr);
-                        } else if (func3 == 0b010) {
-                            sw(cpu, rs2, addr);
-                        }
+                    if (func5 == 0b00000) {
+                        amoadd(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b00001) {
+                        amoswap(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b00010) {
+                        lr(cpu, rd, addr_r);
+                    } else if (func5 == 0b00011) {
+                        sc(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b00100) {
+                        amoxor(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b10000) {
+                        amomin(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b10100) {
+                        amomax(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b01000) {
+                        amoor(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b01100) {
+                        amoand(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b11000) {
+                        amominu(cpu, rd, rs2, addr_r);
+                    } else if (func5 == 0b11100) {
+                        amomaxu(cpu, rd, rs2, addr_r);
                     }
-                    cpu->pc += 4;
+                    cpu->pc += instr_size;
                 }
-            }  
 
-
-            break;
-        }
-        case OPCODE_B_TYPE: {
-            int func3 = extract(instruction, 12, 3);
-            int imm12 = extract(instruction, 31, 1);
-            int imm10_5 = extract(instruction, 25, 6);
-            int imm4_1 = extract(instruction, 8, 4);
-            int imm11 = extract(instruction, 7, 1);
-            int imm_complete = (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1);
-            int imm = sign_extended(imm_complete, 13);
-            int rs1 = extract(instruction, 15, 5);
-            int rs2 = extract(instruction, 20, 5);
-
-            if (evaluate_condition(func3, cpu->reg[rs1], cpu->reg[rs2])) {
-                cpu->pc += imm;
-            } else {
-                cpu->pc += 4;
+                break;
             }
-            break;
-        }
-        case OPCODE_U_LOAD_TYPE: {
-            int imm = extract(instruction, 12, 20) << 12;
-            int rd = extract(instruction, 7, 5);
-
-            if (rd != 0) {
-                cpu->reg[rd] = imm;
+            default: {
+                trap(cpu, 2, false);
+                break;
             }
-            
-            cpu->pc += 4;
-            break;
-        }
-        case OPCODE_U_ADD_TYPE: {
-            int imm = extract(instruction, 12, 20) << 12;
-            int rd = extract(instruction, 7, 5);
-            
-            if (rd != 0) {
-                cpu->reg[rd] = cpu->pc + imm;
-            }
-            cpu->pc += 4;
-            break;
-        }
-        case OPCODE_J_TYPE: {
-            int imm20 = extract(instruction, 31, 1);
-            int imm10_1 = extract(instruction, 21, 10);
-            int imm11 = extract(instruction, 20, 1);
-            int imm19_12 = extract(instruction, 12, 8);
-            int imm_complete = (imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1);
-            int imm = sign_extended(imm_complete, 21);
-            int rd = extract(instruction, 7, 5);
-
-            uint32_t dest = cpu->pc + imm;
-            
-            if (rd != 0) {
-                cpu->reg[rd] = cpu->pc + 4;
-            }
-
-            cpu->pc = dest;
-            break;
-        }
-        case OPCODE_I_JUMP_TYPE: {
-            int imm = sign_extended(extract(instruction, 20, 12), 12);
-            int rd = extract(instruction, 7, 5);
-            int rs1 = extract(instruction, 15, 5);
-
-            uint32_t dest = (cpu->reg[rs1] + imm) & ~1;
-            
-            if (rd != 0) {
-                cpu->reg[rd] = cpu->pc + 4;
-            }
-
-            cpu->pc = dest;
-            break;
-        }
-        case OPCODE_SYSTEM: {
-            int func3 = extract(instruction, 12, 3);
-            int imm = sign_extended(extract(instruction, 20, 12), 12);
-            int rd = extract(instruction, 7, 5);
-            int rs1 = extract(instruction, 15, 5);
-            int csr = extract(instruction, 20, 12);
-
-            if (func3 == 0b000) {
-                if (imm == 0b000) {
-                    trap(cpu, 8 + cpu->mode, false);
-                } else if (imm == 0b001) {
-                    // ebreak
-                } else if (imm == 0b1100000010) {
-                    cpu->pc = cpu->csr[MEPC];
-                    
-                    cpu->mode = get_field(cpu->csr[MSTATUS], 11, 2);
-                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 3, 1, get_field(cpu->csr[MSTATUS], 7, 1));
-                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 7, 1, 1);
-
-                    cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, 0);
-                } else if (imm == 0b000100000010) {
-                    cpu->pc = cpu->csr[SEPC];
-
-                    cpu->mode = get_field(cpu->csr[SSTATUS], 8, 1);
-                    cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 1, 1, get_field(cpu->csr[SSTATUS], 5, 1));
-                    cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 5, 1, 1);
-                    cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 8, 1, 0);
-                }
-            } else if (func3 == 0b001) {
-                csrrw(cpu, rd, cpu->reg[rs1], csr); 
-                cpu->pc += 4;
-            } else if (func3 == 0b010) {
-                csrrs(cpu, rd, cpu->reg[rs1], csr);
-                cpu->pc += 4;
-            } else if (func3 == 0b011) {
-                csrrc(cpu, rd, cpu->reg[rs1], csr);
-                cpu->pc += 4;
-            } else if (func3 == 0b101) {
-                csrrw(cpu, rd, (uint32_t)rs1, csr);
-                cpu->pc += 4;
-            } else if (func3 == 0b110) {
-                csrrs(cpu, rd, (uint32_t)rs1, csr);
-                cpu->pc += 4;
-            } else if (func3 == 0b111) {
-                csrrc(cpu, rd, (uint32_t)rs1, csr);
-                cpu->pc += 4;
-            }
-
-            break;
-        }
-        case OPCODE_MISC_MEM: {
-            cpu->pc += 4;
-            break;
-        }
-        case OPCODE_AMO: {
-            int func5 = extract(instruction, 27, 5);
-            int aq = extract(instruction, 26, 1);
-            int rl = extract(instruction, 25, 1);
-            int rs2 = extract(instruction, 20, 5);
-            int rs1 = extract(instruction, 15, 5);
-            int func3 = extract(instruction, 12, 3);
-            int rd = extract(instruction, 7, 5);
-            uint32_t virt_addr = cpu->reg[rs1];
-
-            bool error_r, error_w;
-            uint32_t addr_r = translate_mmu(cpu, virt_addr, ACCESS_READ, &error_r);
-            uint32_t addr_w = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error_w);
-
-            if (error_r || error_w) {
-                trap(cpu, 15, false);
-            } else {
-                if (func5 == 0b00000) {
-                    amoadd(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b00001) {
-                    amoswap(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b00010) {
-                    lr(cpu, rd, addr_r);
-                } else if (func5 == 0b00011) {
-                    sc(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b00100) {
-                    amoxor(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b10000) {
-                    amomin(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b10100) {
-                    amomax(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b01000) {
-                    amoor(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b01100) {
-                    amoand(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b11000) {
-                    amominu(cpu, rd, rs2, addr_r);
-                } else if (func5 == 0b11100) {
-                    amomaxu(cpu, rd, rs2, addr_r);
-                }
-                cpu->pc += 4;
-            }
-
-            break;
-        }
-        default: {
-            trap(cpu, 2, false);
-            break;
         }
     }
 }

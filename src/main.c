@@ -2,6 +2,47 @@
 #include <stdlib.h>
 #include "cpu.h"
 #include "elf_loader.h"
+#include "kernel_loader.h"
+
+bool load_raw_binary(CPU *cpu, const char *file_path, uint32_t addr) {
+    FILE *f = fopen(file_path, "rb");
+
+    if (f == NULL) {
+        return false;
+    }
+
+    fseek(f, 0, SEEK_END);
+
+    long size = ftell(f);
+
+    if (size < 0) {
+        fclose(f); 
+        
+        return false;
+    }
+
+    size_t file_size = (size_t)size;
+
+    fseek(f, 0, SEEK_SET);
+
+    size_t read = fread(&cpu->memory[addr - MEM_BASE], 1, file_size, f);
+
+    if ((uint64_t)(addr - MEM_BASE) + file_size > MEM_SIZE) {
+        fclose(f);
+
+        return false;
+    }
+
+    if (read != file_size) {
+        fclose(f);
+
+        return false;
+    }
+
+    fclose(f);
+
+    return true;
+}
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -50,14 +91,15 @@ int main(int argc, char *argv[]) {
         }
         
         bool fetch_fail;
-        
-        uint32_t instruction = cpu_fetch(cpu, &fetch_fail);
+        int size;
+
+        uint32_t instruction = cpu_fetch(cpu, &fetch_fail, &size);
 
         if (fetch_fail) {
             continue;
         }
         
-        cpu_decode_execute(cpu, instruction, &terminated);
+        cpu_decode_execute(cpu, instruction, size, &terminated);
         
         if (terminated) {
             printf("Program finished (syscall). Exiting...\n");
@@ -66,8 +108,6 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }
-
-    printf("resultado = %d (esperado 55)\n", *(int32_t*)&cpu->memory[0x80011000 - MEM_BASE]);
 
     printf("Cycle limit reached, aborting...\n");
 

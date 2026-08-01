@@ -56,8 +56,8 @@ typedef struct {
 } CPU;
 
 void cpu_init(CPU *cpu);
-uint32_t cpu_fetch(CPU *cpu, bool *fail);
-void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated);
+uint32_t cpu_fetch(CPU *cpu, bool *fail, int *size);
+void cpu_decode_execute(CPU *cpu, uint32_t instruction, int instr_size, bool *terminated);
 uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes);
 void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes);
 bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2);
