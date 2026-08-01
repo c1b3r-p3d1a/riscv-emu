@@ -445,6 +445,127 @@ static void csrrc(CPU *cpu, int rd, uint32_t valor, int csr) {
     }
 }
 
+static void amoadd(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    write_memory(cpu, addr, read + cpu->reg[rs2], 4);
+}
+
+static void amoswap(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    write_memory(cpu, addr, cpu->reg[rs2], 4);
+}
+
+static void amoxor(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    write_memory(cpu, addr, read ^ cpu->reg[rs2], 4);
+}
+
+static void amoand(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    write_memory(cpu, addr, read & cpu->reg[rs2], 4);
+}
+
+static void amoor(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    write_memory(cpu, addr, read | cpu->reg[rs2], 4);
+}
+
+static void amomin(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    uint32_t new = ((int32_t)read < (int32_t)cpu->reg[rs2]) ? read : cpu->reg[rs2];
+    write_memory(cpu, addr, new, 4);
+}
+
+static void amomax(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    uint32_t nuevo = ((int32_t)read > (int32_t)cpu->reg[rs2]) ? read : cpu->reg[rs2];
+    write_memory(cpu, addr, nuevo, 4);
+}
+
+static void amominu(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    uint32_t new = (read < cpu->reg[rs2]) ? read : cpu->reg[rs2];
+    write_memory(cpu, addr, new, 4);
+}
+
+static void amomaxu(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    uint32_t nuevo = (read > cpu->reg[rs2]) ? read : cpu->reg[rs2];
+    write_memory(cpu, addr, nuevo, 4);
+}
+
+static void lr(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    uint32_t read = read_memory(cpu, addr, 4);
+
+    if (rd != 0) {
+        cpu->reg[rd] = read;
+    }
+
+    cpu->reserve_addr = addr;
+    cpu->reserve_active = true;
+}
+
+static void sc(CPU *cpu, int rd, int rs2, uint32_t addr) {
+    if (cpu->reserve_active && (cpu->reserve_addr == addr)) {
+        write_memory(cpu, addr, cpu->reg[rs2], 4);
+
+        if (rd != 0) {
+            cpu->reg[rd] = 0;
+        }
+    } else {
+        if (rd != 0) {
+            cpu->reg[rd] = 1;
+        }
+    }
+    
+    cpu->reserve_active = false;
+}
+
 void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
     int opcode = extract(instruction, 0, 7);
     *terminated = false;
@@ -738,6 +859,55 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
                 cpu->pc += 4;
             } else if (func3 == 0b111) {
                 csrrc(cpu, rd, (uint32_t)rs1, csr);
+                cpu->pc += 4;
+            }
+
+            break;
+        }
+        case OPCODE_MISC_MEM: {
+            cpu->pc += 4;
+            break;
+        }
+        case OPCODE_AMO: {
+            int func5 = extract(instruction, 27, 5);
+            int aq = extract(instruction, 26, 1);
+            int rl = extract(instruction, 25, 1);
+            int rs2 = extract(instruction, 20, 5);
+            int rs1 = extract(instruction, 15, 5);
+            int func3 = extract(instruction, 12, 3);
+            int rd = extract(instruction, 7, 5);
+            uint32_t virt_addr = cpu->reg[rs1];
+
+            bool error_r, error_w;
+            uint32_t addr_r = translate_mmu(cpu, virt_addr, ACCESS_READ, &error_r);
+            uint32_t addr_w = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error_w);
+
+            if (error_r || error_w) {
+                trap(cpu, 15);
+            } else {
+                if (func5 == 0b00000) {
+                    amoadd(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b00001) {
+                    amoswap(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b00010) {
+                    lr(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b00011) {
+                    sc(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b00100) {
+                    amoxor(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b10000) {
+                    amomin(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b10100) {
+                    amomax(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b01000) {
+                    amoor(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b01100) {
+                    amoand(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b11000) {
+                    amominu(cpu, rd, rs2, addr_r);
+                } else if (func5 == 0b11100) {
+                    amomaxu(cpu, rd, rs2, addr_r);
+                }
                 cpu->pc += 4;
             }
 
