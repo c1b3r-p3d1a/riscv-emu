@@ -90,11 +90,11 @@ bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2) {
     }
 }
 
-static uint32_t get_field(uint32_t val, int pos, int len) {
+uint32_t get_field(uint32_t val, int pos, int len) {
     return (val >> pos) & ((1 << len) - 1);
 }
 
-static uint32_t set_field(uint32_t val, int pos, int len, uint32_t new) {
+uint32_t set_field(uint32_t val, int pos, int len, uint32_t new) {
     return  ((val) & ~(((1 << len) - 1) << pos)) | (new << pos);
 }
 

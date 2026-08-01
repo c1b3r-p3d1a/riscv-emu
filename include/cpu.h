@@ -62,6 +62,8 @@ uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes);
 void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes);
 bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2);
 int32_t sign_extended(uint32_t val, int org_bits);
+uint32_t get_field(uint32_t val, int pos, int len);
+uint32_t set_field(uint32_t val, int pos, int len, uint32_t new);
 void trap(CPU *cpu, uint32_t cause, bool is_interruption);
 uint32_t translate_mmu(CPU *cpu, uint32_t virt_addr, int access_t, bool *error);
 
