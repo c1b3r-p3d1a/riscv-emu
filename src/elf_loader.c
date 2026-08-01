@@ -68,7 +68,7 @@ bool load_elf(CPU *cpu, const char *file_path, uint32_t *entry_point_out) {
 
             // printf("0x%04x 0x%04x 0x%04x 0x%04x\n", offset, virt_addr, file_siz, mem_siz);
 
-            if ((virt_addr + mem_siz) > MEM_SIZE) {
+            if ((virt_addr - MEM_BASE + mem_siz) > MEM_SIZE) {
                 fclose(f);
 
                 return false;
@@ -76,7 +76,7 @@ bool load_elf(CPU *cpu, const char *file_path, uint32_t *entry_point_out) {
 
             fseek(f, offset, SEEK_SET);
 
-            size_t read = fread(&cpu->memory[virt_addr], 1, file_siz, f);
+            size_t read = fread(&cpu->memory[virt_addr - MEM_BASE], 1, file_siz, f);
 
             if (read != file_siz) {
                 fclose(f);
@@ -85,7 +85,7 @@ bool load_elf(CPU *cpu, const char *file_path, uint32_t *entry_point_out) {
             }
 
             for (uint32_t j = file_siz; j < mem_siz; j++) {
-                cpu->memory[virt_addr + i] = 0;
+                cpu->memory[(virt_addr - MEM_BASE) + j] = 0;
             }
         }
 

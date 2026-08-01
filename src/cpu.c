@@ -25,10 +25,10 @@ uint32_t cpu_fetch(CPU *cpu, bool *fail) {
 
     *fail = false;
 
-    uint32_t b0 = cpu->memory[physc_pc + 0];
-    uint32_t b1 = cpu->memory[physc_pc + 1];
-    uint32_t b2 = cpu->memory[physc_pc + 2];
-    uint32_t b3 = cpu->memory[physc_pc + 3];
+    uint32_t b0 = cpu->memory[(physc_pc - MEM_BASE) + 0];
+    uint32_t b1 = cpu->memory[(physc_pc - MEM_BASE) + 1];
+    uint32_t b2 = cpu->memory[(physc_pc - MEM_BASE) + 2];
+    uint32_t b3 = cpu->memory[(physc_pc - MEM_BASE) + 3];
 
     return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
 }
@@ -51,7 +51,7 @@ uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes) {
     uint32_t byte_temp = 0;
 
     for (int i = 0; i < num_bytes; i++) {
-        byte_temp = cpu->memory[addr + i];
+        byte_temp = cpu->memory[(addr - MEM_BASE) + i];
         bytes = bytes | (byte_temp << i*8);
     }
 
@@ -60,7 +60,7 @@ uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes) {
 
 void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes) {
     for (int i = 0; i < num_bytes; i++) {
-        cpu->memory[addr + i] = (value >> i*8) & 0xFF;
+        cpu->memory[(addr - MEM_BASE) + i] = (value >> i*8) & 0xFF;
     }
 }
 
@@ -547,7 +547,7 @@ static void amomaxu(CPU *cpu, int rd, int rs2, uint32_t addr) {
     write_memory(cpu, addr, nuevo, 4);
 }
 
-static void lr(CPU *cpu, int rd, int rs2, uint32_t addr) {
+static void lr(CPU *cpu, int rd, uint32_t addr) {
     uint32_t read = read_memory(cpu, addr, 4);
 
     if (rd != 0) {
@@ -906,7 +906,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
                 } else if (func5 == 0b00001) {
                     amoswap(cpu, rd, rs2, addr_r);
                 } else if (func5 == 0b00010) {
-                    lr(cpu, rd, rs2, addr_r);
+                    lr(cpu, rd, addr_r);
                 } else if (func5 == 0b00011) {
                     sc(cpu, rd, rs2, addr_r);
                 } else if (func5 == 0b00100) {

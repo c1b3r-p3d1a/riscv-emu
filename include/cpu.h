@@ -4,7 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define MEM_SIZE (3 * 1024 * 1024)
+#define MEM_BASE 0x80000000
+#define MEM_SIZE (256 * 1024 * 1024)
 
 enum {
     OPCODE_R_TYPE = 0x33,
