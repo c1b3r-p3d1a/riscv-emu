@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "cpu.h"
 #include "elf_loader.h"
 
@@ -8,11 +9,17 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    CPU cpu;
-    cpu_init(&cpu);
+    CPU *cpu = malloc(sizeof(CPU));
+
+    if (cpu == NULL) {
+        perror("Failed initializing memory for CPU.\n");
+        return 0;
+    }
+
+    cpu_init(cpu);
 
     uint32_t entry_point;
-    bool loaded = load_elf(&cpu, argv[1], &entry_point);
+    bool loaded = load_elf(cpu, argv[1], &entry_point);
 
     if (!loaded) {
         printf("Error loading ELF\n");
@@ -20,46 +27,51 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Load OK\n");
-    cpu.reg[2] = MEM_SIZE - 4;
-    cpu.pc = entry_point;
+    cpu->reg[2] = MEM_BASE + MEM_SIZE - 4;
+    cpu->pc = entry_point;
 
     int MAX_CYCLES = 100000;
     bool terminated = false;
 
     for (int cycle = 0; cycle < MAX_CYCLES; cycle++) {
-        cpu.mtime += 1;
+        cpu->mtime += 1;
 
-        bool condition = (cpu.mtime >= cpu.mtimecmp);
+        bool condition = (cpu->mtime >= cpu->mtimecmp);
 
-        cpu.csr[MIP] = set_field(cpu.csr[MIP], 7, 1, condition ? 1 : 0);
+        cpu->csr[MIP] = set_field(cpu->csr[MIP], 7, 1, condition ? 1 : 0);
 
-        uint32_t mtip = get_field(cpu.csr[MIP], 7, 1);
-        uint32_t mtie = get_field(cpu.csr[MIE], 7, 1);
-        uint32_t mie_global = get_field(cpu.csr[MSTATUS], 3, 1);
+        uint32_t mtip = get_field(cpu->csr[MIP], 7, 1);
+        uint32_t mtie = get_field(cpu->csr[MIE], 7, 1);
+        uint32_t mie_global = get_field(cpu->csr[MSTATUS], 3, 1);
 
         if (mtip && mtie && mie_global) {
-            trap(&cpu, 7, true);
+            trap(cpu, 7, true);
             continue;
         }
         
         bool fetch_fail;
         
-        uint32_t instruction = cpu_fetch(&cpu, &fetch_fail);
+        uint32_t instruction = cpu_fetch(cpu, &fetch_fail);
 
         if (fetch_fail) {
             continue;
         }
         
-        cpu_decode_execute(&cpu, instruction, &terminated);
+        cpu_decode_execute(cpu, instruction, &terminated);
         
         if (terminated) {
             printf("Program finished (syscall). Exiting...\n");
             
+            free(cpu);
             return 0;
         }
     }
 
+    printf("resultado = %d (esperado 55)\n", *(int32_t*)&cpu->memory[0x80011000 - MEM_BASE]);
+
     printf("Cycle limit reached, aborting...\n");
+
+    free(cpu);
 
     return 1;
 }
