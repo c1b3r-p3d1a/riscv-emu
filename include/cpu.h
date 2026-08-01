@@ -30,12 +30,16 @@ enum {
     STVEC = 0x105,
     SSTATUS = 0x100,
     MEDELEG = 0x302,
+    MIDELEG = 0x303,
 
     SATP = 0x180,
 
     ACCESS_READ  = 1,
     ACCESS_WRITE = 2,
-    ACCESS_EXEC  = 3 
+    ACCESS_EXEC  = 3,
+
+    MIP=0x344,
+    MIE=0x304
 };
 
 typedef struct {
@@ -46,6 +50,8 @@ typedef struct {
     int mode;
     uint32_t reserve_addr;
     bool reserve_active;
+    uint64_t mtime;
+    uint32_t mtimecmp;
 } CPU;
 
 void cpu_init(CPU *cpu);
@@ -55,7 +61,7 @@ uint32_t read_memory(CPU *cpu, uint32_t addr, int num_bytes);
 void write_memory(CPU *cpu, uint32_t addr, uint32_t value, int num_bytes);
 bool evaluate_condition(int func3, uint32_t val_rs1, uint32_t val_rs2);
 int32_t sign_extended(uint32_t val, int org_bits);
-void trap(CPU *cpu, uint32_t cause);
+void trap(CPU *cpu, uint32_t cause, bool is_interruption);
 uint32_t translate_mmu(CPU *cpu, uint32_t virt_addr, int access_t, bool *error);
 
 #endif

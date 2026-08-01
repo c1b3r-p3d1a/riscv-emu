@@ -27,6 +27,22 @@ int main(int argc, char *argv[]) {
     bool terminated = false;
 
     for (int cycle = 0; cycle < MAX_CYCLES; cycle++) {
+        cpu.mtime += 1;
+
+        uint32_t mtip = get_field(cpu.csr[MIP], 7, 1);
+        uint32_t mtie = get_field(cpu.csr[MIE], 7, 1);
+        uint32_t mie_global = get_field(cpu.csr[MSTATUS], 3, 1);
+
+        if (cpu.mtime >= cpu.mtimecmp) {
+            cpu.csr[MIP] = set_field(cpu.csr[MIP], 7, 1, 1);
+            mtip = 1;
+        }
+
+        if (mtip && mtie && mie_global) {
+            trap(&cpu, 7, true);
+            continue;
+        }
+        
         bool fetch_fail;
         
         uint32_t instruction = cpu_fetch(&cpu, &fetch_fail);

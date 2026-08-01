@@ -18,7 +18,7 @@ uint32_t cpu_fetch(CPU *cpu, bool *fail) {
     uint32_t physc_pc = translate_mmu(cpu, cpu->pc, ACCESS_EXEC, &error);
 
     if (error) {
-        trap(cpu, 12);
+        trap(cpu, 12, false);
         *fail = true;
         return 0;
     }
@@ -98,8 +98,16 @@ static uint32_t set_field(uint32_t val, int pos, int len, uint32_t new) {
     return  ((val) & ~(((1 << len) - 1) << pos)) | (new << pos);
 }
 
-void trap(CPU *cpu, uint32_t cause) {
-    bool delegate = (cpu->mode != 3) && (get_field(cpu->csr[MEDELEG], cause, 1) == 1);
+void trap(CPU *cpu, uint32_t cause, bool is_interruption) {
+    bool delegate;
+
+    if (is_interruption) {
+        delegate = (cpu->mode != 3) && (get_field(cpu->csr[MIDELEG], cause, 1) == 1);
+    } else {
+        delegate = (cpu->mode != 3) && (get_field(cpu->csr[MEDELEG], cause, 1) == 1);
+    }
+
+    uint32_t final_cause = is_interruption ? (cause | 0x80000000) : cause;
 
     if (delegate) {
         cpu->csr[SSTATUS] = set_field(cpu->csr[SSTATUS], 8, 1, cpu->mode);
@@ -109,7 +117,7 @@ void trap(CPU *cpu, uint32_t cause) {
         cpu->mode = 1;
         
         cpu->csr[SEPC] = cpu->pc;
-        cpu->csr[SCAUSE] = cause;
+        cpu->csr[SCAUSE] = final_cause;
         cpu->pc = cpu->csr[STVEC];
     } else {
         cpu->csr[MSTATUS] = set_field(cpu->csr[MSTATUS], 11, 2, cpu->mode);
@@ -119,7 +127,7 @@ void trap(CPU *cpu, uint32_t cause) {
         cpu->mode = 3;
 
         cpu->csr[MEPC] = cpu->pc;
-        cpu->csr[MCAUSE] = cause;
+        cpu->csr[MCAUSE] = final_cause;
         cpu->pc = cpu->csr[MTVEC];
     }
 }
@@ -674,28 +682,34 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             uint32_t virt_addr = cpu->reg[rs1] + imm;
 
             if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
-                trap(cpu, 4);
+                trap(cpu, 4, false);
             } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
-                trap(cpu, 4);
+                trap(cpu, 4, false);
             } else if ((func3 == 0b101) && (virt_addr % 2 != 0)) {
-                trap(cpu, 4);
+                trap(cpu, 4, false);
             } else {
                 bool error;
                 uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_READ, &error);
     
                 if (error) {
-                    trap(cpu, 13);
+                    trap(cpu, 13, false);
                 } else {
-                    if (func3 == 0b000) {
-                        lb(cpu, rd, addr);
-                    } else if (func3 == 0b001) {
-                        lh(cpu, rd, addr);
-                    } else if (func3 == 0b010) {
-                        lw(cpu, rd, addr);
-                    } else if (func3 == 0b100) {
-                        lbu(cpu, rd, addr);
-                    } else if (func3 == 0b101) {
-                        lhu(cpu, rd, addr);
+                    if (addr == 0x0200BFF8) {
+                        if (rd != 0) {
+                            cpu->reg[rd] = (uint32_t)cpu->mtime;
+                        }
+                    } else {
+                        if (func3 == 0b000) {
+                            lb(cpu, rd, addr);
+                        } else if (func3 == 0b001) {
+                            lh(cpu, rd, addr);
+                        } else if (func3 == 0b010) {
+                            lw(cpu, rd, addr);
+                        } else if (func3 == 0b100) {
+                            lbu(cpu, rd, addr);
+                        } else if (func3 == 0b101) {
+                            lhu(cpu, rd, addr);
+                        }
                     }
                     cpu->pc += 4;
                 }
@@ -713,20 +727,22 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             uint32_t virt_addr = cpu->reg[rs1] + imm;
 
             if ((func3 == 0b001) && (virt_addr % 2 != 0)) {
-                trap(cpu, 6);
+                trap(cpu, 6, false);
             } else if ((func3 == 0b010) && (virt_addr % 4 != 0)) {
-                trap(cpu, 6);
+                trap(cpu, 6, false);
             } else {
                 bool error;
                 uint32_t addr = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error);
     
                 if (error) {
-                    trap(cpu, 15);
+                    trap(cpu, 15, false);
                 } else {
                     if (addr == 0x10000000) {
                         putchar((char)cpu->reg[rs2]);
                     } else if ((addr == 0x100000) && (cpu->reg[rs2] == 0x5555)) {
                         *terminated = true;
+                    } else if (addr == 0x02004000) {
+                        cpu->mtimecmp = cpu->reg[rs2];
                     } else {
                         if (func3 == 0b000) {
                             sb(cpu, rs2, addr);
@@ -823,7 +839,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
 
             if (func3 == 0b000) {
                 if (imm == 0b000) {
-                    trap(cpu, 8 + cpu->mode);
+                    trap(cpu, 8 + cpu->mode, false);
                 } else if (imm == 0b001) {
                     // ebreak
                 } else if (imm == 0b1100000010) {
@@ -883,7 +899,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             uint32_t addr_w = translate_mmu(cpu, virt_addr, ACCESS_WRITE, &error_w);
 
             if (error_r || error_w) {
-                trap(cpu, 15);
+                trap(cpu, 15, false);
             } else {
                 if (func5 == 0b00000) {
                     amoadd(cpu, rd, rs2, addr_r);
@@ -914,7 +930,7 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, bool *terminated) {
             break;
         }
         default: {
-            trap(cpu, 2);
+            trap(cpu, 2, false);
             break;
         }
     }
