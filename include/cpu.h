@@ -66,5 +66,6 @@ uint32_t get_field(uint32_t val, int pos, int len);
 uint32_t set_field(uint32_t val, int pos, int len, uint32_t new);
 void trap(CPU *cpu, uint32_t cause, bool is_interruption);
 uint32_t translate_mmu(CPU *cpu, uint32_t virt_addr, int access_t, bool *error);
+uint32_t compressed_reg(int bits);
 
 #endif

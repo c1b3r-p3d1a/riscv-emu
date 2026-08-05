@@ -149,38 +149,82 @@ uint32_t translate_mmu(CPU *cpu, uint32_t virt_addr, int access_t, bool *error) 
     if (get_field(cpu->csr[SATP], 31, 1) == 0) {
         *error = false;
         return virt_addr;
-    } else {
-        uint32_t vpn1 = get_field(virt_addr, 22, 10);
-        uint32_t vpn0 = get_field(virt_addr, 12, 10);
-        uint32_t offset = get_field(virt_addr, 0, 12);
+    }
 
-        uint32_t level1_table = get_field(cpu->csr[SATP], 0, 22) * 4096;
-        uint32_t pte1 = read_memory(cpu, level1_table + vpn1*4, 4);
+    uint32_t vpn1 = get_field(virt_addr, 22, 10);
+    uint32_t vpn0 = get_field(virt_addr, 12, 10);
+    uint32_t offset = get_field(virt_addr, 0, 12);
 
-        if (get_field(pte1, 0, 1) == 0) {
+    uint32_t table = get_field(cpu->csr[SATP], 0, 22) << 12;
+
+    for (int level = 1; level >= 0; level--) {
+        uint32_t vpn = (level == 1) ? vpn1 : vpn0;
+
+        uint32_t pte = read_memory(cpu, table + vpn * 4, 4);
+
+        bool v = get_field(pte, 0, 1);
+        bool r = get_field(pte, 1, 1);
+        bool w = get_field(pte, 2, 1);
+        bool x = get_field(pte, 3, 1);
+        bool u = get_field(pte, 4, 1);
+
+        if (!v || (!r && w)) {
             *error = true;
             return 0;
         }
 
-        uint32_t level2_table = get_field(pte1, 10, 22) * 4096;
-        uint32_t pte2 = read_memory(cpu, level2_table + vpn0*4, 4);
-
-        if ((get_field(pte2, 2, 1) == 1) && (get_field(pte2, 1, 1) == 0)) {
-            *error = true;
-            return 0;
-        } else if (get_field(pte2, access_t, 1) == 1) {
-            if (((get_field(pte2, 4, 1) == 0) && (cpu->mode == 0)) | ((get_field(pte2, 4, 1) == 1) && ((cpu->mode == 1) | (cpu->mode == 3)))) {
+        if (r || x) {
+            if ((access_t == ACCESS_READ) && !r) {
                 *error = true;
                 return 0;
             }
-        } else {
-            *error = true;
-            return 0;
+
+            if ((access_t == ACCESS_WRITE) && !w) {
+                *error = true;
+                return 0;
+            }
+
+            if ((access_t == ACCESS_EXEC) && !x) {
+                *error = true;
+                return 0;
+            }
+
+            if ((cpu->mode == 0) && !u) {
+                *error = true;
+                return 0;
+            }
+
+            if ((cpu->mode != 0) && u) {
+                *error = true;
+                return 0;
+            }
+
+            uint32_t ppn1 = get_field(pte, 20, 12);
+            uint32_t ppn0 = get_field(pte, 10, 10);
+
+            *error = false;
+
+            if (level == 1) {
+                if (ppn0 != 0) {
+                    *error = true;
+                    return 0;
+                }
+
+                return (ppn1 << 22) | (vpn0 << 12) | offset;
+            }
+
+            return (ppn1 << 22) | (ppn0 << 12) | offset;
         }
 
-        *error = false;
-        return (get_field(pte2, 10, 22) * 4096) + offset;
+        table = get_field(pte, 10, 22) << 12;
     }
+
+    *error = true;
+    return 0;
+}
+
+uint32_t compressed_reg(int bits) {
+    return (bits & 0x7) + 8;
 }
 
 static void add(CPU *cpu, int rd, int rs1, int rs2) {
@@ -592,7 +636,33 @@ void cpu_decode_execute(CPU *cpu, uint32_t instruction, int instr_size, bool *te
     *terminated = false;
 
     if (instr_size == 2) {
-        trap(cpu, 2, false);
+        int func3 = extract(instruction, 13, 3);
+
+        switch (func3) {
+            case 0b010: {
+                int rd_comp = compressed_reg(extract(instruction, 2, 3));
+                int rs1_comp = compressed_reg(extract(instruction, 7, 3));
+                uint32_t imm = (extract(instruction, 10, 3) << 3) | (extract(instruction, 6, 1) << 2) | (extract(instruction, 5, 1) << 6);
+                uint32_t virt_addr = cpu->reg[rs1_comp] + imm;
+
+                bool error;
+                uint32_t phys_addr = translate_mmu(cpu, virt_addr, ACCESS_READ, &error);
+
+                if (error) {
+                    trap(cpu, 13, false);
+                    break;
+                }
+
+                lw(cpu, rd_comp, phys_addr);
+
+                cpu->pc += instr_size;
+                break;
+            }
+            default: {
+                trap(cpu, 2, false);
+                break;
+            }
+        }
     } else {
         switch (opcode) {
             case OPCODE_R_TYPE: {
